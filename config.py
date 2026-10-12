@@ -3,9 +3,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = "claude-sonnet-5"
-
 BENTHANH_API_BASE = "https://benthanhtourist.com/api/tour"
 BENTHANH_HEADERS = {"Accept": "application/json", "User-Agent": "Mozilla/5.0"}
 
@@ -22,11 +19,7 @@ CHROMA_COLLECTION = "benthanh_tours"
 
 DATABASE_PATH = "./chatbot.sqlite3"
 
-# --- Thêm cho demo test Luna (§14) ---
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-LUNA_MODEL = "gpt-5.6-luna"
-
-# --- Tạm dùng Gemini (free tier) thay Luna khi chưa nạp credit OpenAI ---
+# [GEMINI] Cấu hình Gemini API (SDK OpenAI trỏ sang Gemini endpoint)
 # Lấy key miễn phí tại https://aistudio.google.com/apikey
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-3.6-flash"

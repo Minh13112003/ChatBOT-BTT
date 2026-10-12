@@ -1,6 +1,5 @@
 fastapi
 uvicorn
-anthropic
 openai
 httpx
 chromadb

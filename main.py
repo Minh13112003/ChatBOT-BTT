@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from rules import MAX_HISTORY_TURNS, RATE_LIMIT_PER_MINUTE, RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_DAY, MIN_GIAY_GIUA_2_CAU_HOI, ZALO_NHAN_VIEN_URL
 from rag import tim_tour_lien_quan, hoi_tim_tour_thieu_thong_tin, hoi_muon_gap_nhan_vien
 from moderation import co_noi_dung_nhay_cam
-# from llm_luna import hoi_luna  # tạm tắt — chưa nạp credit OpenAI, xem §ghi chú dưới
+# [GEMINI] T-001: Chỉ dùng Gemini, bỏ Luna
 from llm_gemini import hoi_gemini, tom_tat_hoi_thoai
 from database import khoi_tao_database, luu_tin_nhan, lay_lich_su, kiem_tra_rate_limit
 
@@ -19,7 +19,6 @@ TRA_LOI_KHI_BI_CHAN = "Mình xin phép không trả lời câu này ạ. Câu n�
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    model: str = "gemini"  # "gemini" là lựa chọn duy nhất hoạt động ở bản demo này — Luna tạm tắt (chưa nạp credit OpenAI)
 
 
 @app.post("/chat")
@@ -68,15 +67,8 @@ def chat(req: ChatRequest):
         else []
     )
 
-    if req.model == "gemini":
-        reply = hoi_gemini(req.message, tours, lich_su)
-    elif req.model == "luna":
-        # reply = hoi_luna(req.message, tours, lich_su)  # tạm tắt — chưa nạp credit OpenAI, bỏ comment 2 dòng import/gọi để bật lại
-        return {"reply": "Model Luna tạm tắt do chưa nạp credit OpenAI.", "tours": [], "goi_y": []}
-    else:
-        # Chỗ dành sẵn cho Claude khi bạn muốn bật so sánh trực tiếp —
-        # nối lại y hệt xay_system_prompt() + claude.messages.create() ở §10.7.
-        return {"reply": "Model Claude chưa bật ở bản demo này.", "tours": [], "goi_y": []}
+    # [GEMINI] T-001: Luôn dùng Gemini cho bttAI
+    reply = hoi_gemini(req.message, tours, lich_su)
 
     luu_tin_nhan(req.session_id, "user", req.message)
     luu_tin_nhan(req.session_id, "assistant", reply)
