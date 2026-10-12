@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+anthropic
+openai
+httpx
+chromadb
+python-dotenv

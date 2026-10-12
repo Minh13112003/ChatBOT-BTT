@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Demo test Luna — BenThanh Tourist</title>
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 640px; margin: 32px auto; background: #fff; color: #222; }
+  .khung-chat { border: 1px solid #eee; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+  .thanh-tieu-de { background: #E5252A; color: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .chon-model { display: flex; gap: 6px; }
+  .chon-model button { border: none; border-radius: 100px; padding: 5px 12px; font-size: .78rem; font-weight: 600; cursor: pointer; }
+  .chon-model button.active { background: #fff; color: #E5252A; }
+  .chon-model button:not(.active) { background: rgba(255,255,255,.2); color: #fff; }
+  .chon-model button:disabled { background: rgba(0,0,0,.15); color: rgba(255,255,255,.5); cursor: not-allowed; }
+  .khung-tin-nhan { height: 440px; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #fafafa; }
+  .dong { display: flex; }
+  .dong.khach { justify-content: flex-end; }
+  .bong-bong { max-width: 78%; padding: 10px 14px; border-radius: 14px; font-size: .9rem; line-height: 1.5; white-space: pre-wrap; }
+  .dong.khach .bong-bong { background: #E5252A; color: #fff; border-bottom-right-radius: 4px; }
+  .dong.bot .bong-bong { background: #fff; border: 1px solid #eee; border-bottom-left-radius: 4px; }
+  .con-tro-go { display: inline-block; width: 2px; height: 1em; background: #999; vertical-align: text-bottom; margin-left: 1px; animation: nhay-con-tro .8s infinite; }
+  @keyframes nhay-con-tro { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+  .dang-suy-nghi { display: flex; align-items: center; gap: 8px; color: #888; font-style: italic; }
+  .cham-suy-nghi { display: inline-flex; gap: 3px; }
+  .cham-suy-nghi span { width: 6px; height: 6px; border-radius: 50%; background: #bbb; animation: nhay-cham 1.1s infinite ease-in-out; }
+  .cham-suy-nghi span:nth-child(2) { animation-delay: .15s; }
+  .cham-suy-nghi span:nth-child(3) { animation-delay: .3s; }
+  @keyframes nhay-cham { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+  .the-tour { display: block; margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: #FFF8ED; border: 1px solid #F0D9B5; text-decoration: none; color: #222; }
+  .the-tour b { display: block; color: #C81E23; }
+  .the-tour .so-ngay-dem { display: block; margin-top: 2px; font-size: .8rem; color: #888; }
+  .the-tour .ngay-khoi-hanh { display: block; margin-top: 2px; font-size: .8rem; color: #888; }
+  .the-tour .con-cho { display: inline-block; margin-top: 4px; font-size: .76rem; font-weight: 700; padding: 2px 8px; border-radius: 100px; }
+  .the-tour .con-cho.sap-het { background: #FDECEC; color: #C81E23; }
+  .the-tour .con-cho.con-nhieu { background: #EAF6EC; color: #2f7d4f; }
+
+  .goi-y-nhanh { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip-nhanh { border: 1px solid #F0B8B8; border-radius: 100px; padding: 6px 12px; font-size: .78rem; background: #fff; color: #C81E23; cursor: pointer; }
+  .chip-nhanh:hover { background: #FFF4F4; }
+
+  .the-handoff { display: block; margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: #E8F5EA; border: 1px solid #B7E0BE; text-decoration: none; color: #1d5a2e; }
+  .the-handoff .nhan-zalo { display: flex; align-items: center; gap: 6px; font-weight: 700; color: #0b5f2f; }
+  .the-handoff .tom-tat { display: block; margin-top: 6px; font-size: .8rem; color: #3d6b47; line-height: 1.5; }
+
+  .goi-y { border-top: 1px solid #eee; }
+  .goi-y-tieu-de { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; font-size: .8rem; color: #666; font-weight: 600; user-select: none; }
+  .goi-y-tieu-de .mui-ten { transition: transform .15s; }
+  .goi-y-tieu-de .mui-ten.dong { transform: rotate(-90deg); }
+  .goi-y-danh-sach { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
+  .chip-goi-y { border: 1px solid #ddd; border-radius: 100px; padding: 7px 14px; font-size: .82rem; background: #fff; color: #333; cursor: pointer; }
+  .chip-goi-y:hover { background: #FFF4F4; border-color: #E5252A; color: #C81E23; }
+  .chip-goi-y:disabled { opacity: .5; cursor: not-allowed; }
+
+  .khung-nhap { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; align-items: flex-end; }
+  .khung-nhap textarea { flex: 1; padding: 10px 14px; border-radius: 18px; border: 1px solid #ddd; font-family: inherit; font-size: 1rem; resize: none; max-height: 120px; line-height: 1.4; }
+  .khung-nhap button { border: none; border-radius: 100px; padding: 10px 18px; background: #E5252A; color: #fff; font-weight: 700; cursor: pointer; flex: none; }
+  .khung-nhap button:disabled { background: #ccc; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="khung-chat">
+    <div class="thanh-tieu-de">
+      <div>bttAI — BenThanh Tourist</div>
+      <div class="chon-model">
+        <button :class="{active: modelDangChon === 'gemini'}" @click="modelDangChon = 'gemini'">Gemini</button>
+        <button disabled title="Tạm tắt — chưa nạp credit OpenAI">GPT-5.6 Luna</button>
+        <button disabled title="Chưa bật ở bản demo này — xem §14">Claude Sonnet 5</button>
+      </div>
+    </div>
+
+    <div class="khung-tin-nhan" ref="khungTinNhan">
+      <div v-for="(tin, i) in danhSachTinNhan" :key="i" class="dong" :class="tin.vaiTro === 'user' ? 'khach' : 'bot'">
+        <div class="bong-bong">
+          {{ tin.noiDung }}<span v-if="tin.dangGoChu" class="con-tro-go"></span>
+          <template v-if="!tin.dangGoChu">
+            <a v-for="t in tin.tours" :key="t.id" class="the-tour" :href="t.url" target="_blank">
+              <b>{{ t.ten }}</b>{{ t.gia != null ? t.gia.toLocaleString('vi-VN') + 'đ' : 'Xem chi tiết' }}
+              <span v-if="t.so_ngay" class="so-ngay-dem">{{ t.so_ngay }} ngày {{ t.so_ngay - 1 }} đêm</span>
+              <span v-if="ngayKhoiHanhGanNhat(t)" class="ngay-khoi-hanh">{{ nhanNgayKhoiHanh(t, tin.tours) }} {{ ngayKhoiHanhGanNhat(t) }}</span>
+              <span v-if="nhanConCho(t)" class="con-cho" :class="t.so_cho_con <= 5 ? 'sap-het' : 'con-nhieu'">{{ nhanConCho(t) }}</span>
+            </a>
+            <div v-if="tin.goiY && tin.goiY.length" class="goi-y-nhanh">
+              <button
+                v-for="cau in tin.goiY" :key="cau"
+                class="chip-nhanh" type="button"
+                :disabled="dangChoPhanHoi"
+                @click="guiCauHoi(cau)"
+              >{{ cau }}</button>
+            </div>
+            <a v-if="tin.handoff" class="the-handoff" :href="tin.handoff.zalo_url" target="_blank">
+              <span class="nhan-zalo">💬 Nhắn Zalo nhân viên CSKH ngay</span>
+              <span v-if="tin.handoff.tom_tat" class="tom-tat">Nhân viên đã có tóm tắt: “{{ tin.handoff.tom_tat }}”</span>
+            </a>
+          </template>
+        </div>
+      </div>
+      <div v-if="dangChoPhanHoiTuServer" class="dong bot">
+        <div class="bong-bong dang-suy-nghi">
+          bttAI đang suy nghĩ, bạn chờ chút nha
+          <span class="cham-suy-nghi"><span></span><span></span><span></span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="goi-y">
+      <div class="goi-y-tieu-de" @click="moGoiY = !moGoiY">
+        <span>Gợi ý câu hỏi</span>
+        <span class="mui-ten" :class="{ dong: !moGoiY }">▾</span>
+      </div>
+      <div class="goi-y-danh-sach" v-if="moGoiY">
+        <button
+          v-for="cau in cacCauGoiY" :key="cau"
+          class="chip-goi-y" type="button"
+          :disabled="dangChoPhanHoi"
+          @click="guiCauHoi(cau)"
+        >{{ cau }}</button>
+      </div>
+    </div>
+
+    <form class="khung-nhap" @submit.prevent="guiCauHoi()">
+      <textarea
+        ref="oNhap"
+        v-model="cauHoiDangNhap"
+        :disabled="dangChoPhanHoi"
+        placeholder="Nhập câu hỏi test..."
+        rows="1"
+        @input="tuGianONhap"
+        @keydown.enter.exact.prevent="guiCauHoi()"
+      ></textarea>
+      <button :disabled="dangChoPhanHoi">{{ dangChoPhanHoi ? '...' : 'Gửi' }}</button>
+    </form>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, nextTick } = Vue;
+
+createApp({
+  setup() {
+    let sessionId = localStorage.getItem("demo_luna_session_id");
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem("demo_luna_session_id", sessionId);
+    }
+
+    const danhSachTinNhan = ref([
+      {
+        vaiTro: "bot",
+        noiDung: "Xin chào mọi người đã đến với BenThanh Tourist, tôi là bttAI, bạn hãy cho tôi biết là bạn cần gì về tour du lịch hôm nay nào?",
+        tours: [],
+      },
+    ]);
+    const cauHoiDangNhap = ref("");
+    const dangChoPhanHoi = ref(false);
+    // Riêng cho bong bóng "đang suy nghĩ" — bật khi vừa gửi request, tắt
+    // ngay khi nhận được response (trước khi bắt đầu gõ chữ dần).
+    const dangChoPhanHoiTuServer = ref(false);
+    const modelDangChon = ref("gemini"); // "luna"/"claude" tạm chưa dùng được ở bản demo
+    const khungTinNhan = ref(null);
+    const oNhap = ref(null);
+
+    // <textarea> tự giãn chiều cao theo nội dung (đến max-height trong CSS,
+    // phần dư sẽ cuộn) — thay cho <input> chỉ cuộn ngang khi gõ dài.
+    function tuGianONhap() {
+      const el = oNhap.value;
+      if (!el) return;
+      el.style.height = "auto";
+      el.style.height = el.scrollHeight + "px";
+    }
+
+    // Gợi ý cố định — bấm vào sẽ tự gửi đúng câu này, bot tự tra cứu dữ liệu
+    // tour thật (qua ChromaDB, xem rag.py) chứ không phải link tĩnh.
+    const moGoiY = ref(true);
+    const cacCauGoiY = ref([
+      "Có tour nào độc lạ, ít người biết không?",
+      "Tour trong nước giá tốt",
+      "Tour nước ngoài đang có",
+      "Tour phù hợp đi cùng gia đình có trẻ nhỏ",
+    ]);
+
+    // ngay_khoi_hanh là chuỗi "2026-09-22,2026-09-22,..." (đã sort tăng dần,
+    // có thể trùng ngày do nhiều suất) — chỉ cần ngày đầu tiên (gần nhất).
+    function ngayKhoiHanhGanNhat(tour) {
+      if (!tour.ngay_khoi_hanh) return "";
+      const ngayDau = tour.ngay_khoi_hanh.split(",")[0];
+      const [nam, thang, ngay] = ngayDau.split("-");
+      if (!nam || !thang || !ngay) return "";
+      return `${ngay}/${thang}/${nam}`;
+    }
+
+    // Bình thường (1 thẻ/tên tour) -> "Khởi hành gần nhất:" đúng nghĩa.
+    // Khi khách hỏi "ngày khác" và backend trả về NHIỀU thẻ CÙNG TÊN tour
+    // (mỗi thẻ là 1 lượt khởi hành riêng, xem rag.py) -> mỗi thẻ chỉ có ĐÚNG
+    // 1 ngày cụ thể của lượt đó, không còn là "gần nhất trong nhiều lựa
+    // chọn" nữa -> đổi nhãn thành "Khởi hành:" cho đỡ gây hiểu lầm.
+    function nhanNgayKhoiHanh(tour, danhSachTours) {
+      const soLanTrungTen = danhSachTours.filter((t) => t.ten === tour.ten).length;
+      return soLanTrungTen > 1 ? "Khởi hành:" : "Khởi hành gần nhất:";
+    }
+
+    // Chỉ hiện nhãn chỗ còn khi backend có trả field này (tour cũ đồng bộ
+    // trước khi thêm so_cho_con sẽ không có field -> undefined, ẩn nhãn thay
+    // vì hiện "0 chỗ" sai sự thật).
+    function nhanConCho(tour) {
+      if (tour.so_cho_con === undefined || tour.so_cho_con === null) return "";
+      if (tour.so_cho_con <= 0) return "";
+      return tour.so_cho_con <= 5 ? `Chỉ còn ${tour.so_cho_con} chỗ!` : `Còn ${tour.so_cho_con} chỗ`;
+    }
+
+    async function cuonXuongDuoi() {
+      await nextTick();
+      if (khungTinNhan.value) khungTinNhan.value.scrollTop = khungTinNhan.value.scrollHeight;
+    }
+
+    // Giả lập hiệu ứng gõ chữ ở FRONTEND — backend vẫn trả lời đủ 1 lần
+    // (không streaming thật), chỉ hiện dần từng ký tự cho cảm giác tự nhiên.
+    const TOC_DO_GO_MS = 9; // càng nhỏ càng gõ nhanh (đã tăng gấp đôi tốc độ theo yêu cầu)
+
+    function goChuDan(tin, vanBanDayDu) {
+      return new Promise((giaiQuyet) => {
+        let viTri = 0;
+        const dem = setInterval(() => {
+          viTri += 1;
+          tin.noiDung = vanBanDayDu.slice(0, viTri);
+          cuonXuongDuoi();
+          if (viTri >= vanBanDayDu.length) {
+            clearInterval(dem);
+            tin.dangGoChu = false;
+            giaiQuyet();
+          }
+        }, TOC_DO_GO_MS);
+      });
+    }
+
+    async function guiCauHoi(cauGoiY) {
+      const cauHoi = (cauGoiY ?? cauHoiDangNhap.value).trim();
+      if (!cauHoi || dangChoPhanHoi.value) return;
+      danhSachTinNhan.value.push({ vaiTro: "user", noiDung: cauHoi });
+      cauHoiDangNhap.value = "";
+      nextTick(tuGianONhap); // gửi xong -> ô nhập rỗng -> co lại về 1 dòng
+      dangChoPhanHoi.value = true;
+      dangChoPhanHoiTuServer.value = true;
+      cuonXuongDuoi();
+
+      try {
+        const res = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, message: cauHoi, model: modelDangChon.value }),
+        });
+        const data = await res.json();
+        dangChoPhanHoiTuServer.value = false; // tắt "đang suy nghĩ", chuyển sang gõ chữ
+        danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: "", tours: data.tours, goiY: data.goi_y, handoff: data.handoff, dangGoChu: true });
+        // Lấy lại tham chiếu TỪ mảng reactive (không dùng object vừa tạo ở trên)
+        // để chắc chắn Vue theo dõi đúng thay đổi khi gõ dần từng ký tự.
+        const tin = danhSachTinNhan.value[danhSachTinNhan.value.length - 1];
+        await goChuDan(tin, data.reply);
+      } finally {
+        dangChoPhanHoiTuServer.value = false;
+        dangChoPhanHoi.value = false;
+        cuonXuongDuoi();
+      }
+    }
+
+    return { danhSachTinNhan, cauHoiDangNhap, dangChoPhanHoi, dangChoPhanHoiTuServer, modelDangChon, khungTinNhan, oNhap, tuGianONhap, moGoiY, cacCauGoiY, guiCauHoi, ngayKhoiHanhGanNhat, nhanNgayKhoiHanh, nhanConCho };
+  },
+}).mount("#app");
+</script>
+</body>
+</html>
