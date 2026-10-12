@@ -9,6 +9,7 @@ def khoi_tao_database():
             CREATE TABLE IF NOT EXISTS chat_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL,
+                user_id TEXT,
                 role TEXT NOT NULL,             -- 'user' hoặc 'assistant'
                 content TEXT NOT NULL,
                 created_at TEXT DEFAULT (datetime('now'))
@@ -24,7 +25,14 @@ def khoi_tao_database():
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session ON chat_messages(session_id)")
+        # [GEMINI] T-003: Đảm bảo có cột user_id và index
+        cursor = conn.execute("PRAGMA table_info(chat_messages)")
+        cols = [row[1] for row in cursor.fetchall()]
+        if "user_id" not in cols:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN user_id TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_user_id ON chat_messages(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tour_code ON tour_click_events(tour_code)")
+    don_tin_nhan_cu_3_ngay()
 
 
 @contextmanager
@@ -37,11 +45,14 @@ def ket_noi():
         conn.close()
 
 
-def luu_tin_nhan(session_id: str, role: str, content: str):
+# [GEMINI] T-003: Lưu tin nhắn kèm user_id nếu có
+def luu_tin_nhan(session_id: str, role: str, content: str, user_id: str | None = None):
+    if user_id is None and ":" in session_id:
+        user_id = session_id.split(":", 1)[0]
     with ket_noi() as conn:
         conn.execute(
-            "INSERT INTO chat_messages (session_id, role, content) VALUES (?, ?, ?)",
-            (session_id, role, content),
+            "INSERT INTO chat_messages (session_id, user_id, role, content) VALUES (?, ?, ?, ?)",
+            (session_id, user_id, role, content),
         )
 
 
@@ -57,12 +68,15 @@ def lay_lich_su(session_id: str, so_luot: int) -> list[dict]:
     return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
 
 
-def kiem_tra_rate_limit(session_id: str, gioi_han_phut: int, gioi_han_gio: int, gioi_han_ngay: int, giay_toi_thieu_giua_2_cau: int) -> str | None:
-    """3 lớp rate limit theo thời gian + time-check khoảng cách 2 câu liên
-    tiếp (§8.2, §8.2b ở rules.py) — CHỈ đếm tin nhắn role='user' (không tính
-    'assistant', tránh đếm gấp đôi mỗi lượt hỏi-đáp). Trả về chuỗi lý do nếu
-    bị chặn, None nếu được phép gửi tiếp. Dùng SQLite datetime('now') làm mốc
-    thời gian chung, tránh lệch múi giờ giữa server và client."""
+# [GEMINI] T-003: Rate limit tính theo user_id (tránh đổi conversation_id để né)
+def kiem_tra_rate_limit(
+    identifier: str,
+    gioi_han_phut: int,
+    gioi_han_gio: int,
+    gioi_han_ngay: int,
+    giay_toi_thieu_giua_2_cau: int,
+) -> str | None:
+    user_id = identifier.split(":", 1)[0] if ":" in identifier else identifier
     with ket_noi() as conn:
         row = conn.execute(
             """SELECT
@@ -70,8 +84,9 @@ def kiem_tra_rate_limit(session_id: str, gioi_han_phut: int, gioi_han_gio: int, 
                 SUM(CASE WHEN created_at >= datetime('now', '-1 hour') THEN 1 ELSE 0 END),
                 SUM(CASE WHEN created_at >= datetime('now', '-1 day') THEN 1 ELSE 0 END),
                 MAX(created_at)
-               FROM chat_messages WHERE session_id = ? AND role = 'user'""",
-            (session_id,),
+               FROM chat_messages
+               WHERE (user_id = ? OR session_id = ? OR session_id LIKE ?) AND role = 'user'""",
+            (user_id, user_id, f"{user_id}:%"),
         ).fetchone()
         so_phut, so_gio, so_ngay, tin_nhan_gan_nhat = row
         so_phut, so_gio, so_ngay = so_phut or 0, so_gio or 0, so_ngay or 0
@@ -112,3 +127,21 @@ def thong_ke_tour_hot(gioi_han: int = 10) -> list[dict]:
             (gioi_han,),
         ).fetchall()
     return [{"tour_code": r[0], "tour_name": r[1], "so_luot_click": r[2]} for r in rows]
+
+
+# [GEMINI] T-003: Dọn tin nhắn cũ hơn 3 ngày trong SQLite
+def don_tin_nhan_cu_3_ngay() -> int:
+    with ket_noi() as conn:
+        cursor = conn.execute("DELETE FROM chat_messages WHERE created_at < datetime('now', '-3 days')")
+        return cursor.rowcount
+
+
+# [GEMINI] T-003: Xoá lịch sử cuộc trò chuyện của đúng người dùng
+def xoa_lich_su_cuoc_tro_chuyen(user_id: str, conversation_id: str) -> int:
+    session_key = f"{user_id}:{conversation_id}"
+    with ket_noi() as conn:
+        cursor = conn.execute(
+            "DELETE FROM chat_messages WHERE session_id = ? OR (user_id = ? AND session_id LIKE ?)",
+            (session_key, user_id, f"%:{conversation_id}"),
+        )
+        return cursor.rowcount

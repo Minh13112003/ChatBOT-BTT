@@ -24,3 +24,7 @@ DATABASE_PATH = "./chatbot.sqlite3"
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-3.6-flash"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
+# [GEMINI] T-003: Base URL NestJS backend để xác thực người dùng
+NESTJS_BASE_URL = os.environ.get("NESTJS_BASE_URL", "").strip()
