@@ -136,6 +136,19 @@ def dong_bo():
         # trả rỗng (xem lý do ở suy_luan_diem_den()).
         diem_den = chi_tiet["destination_place"] or suy_luan_diem_den(chi_tiet["name"])
 
+        # [GEMINI] T-002: Lấy URL ảnh đại diện đầy đủ từ API chi tiết
+        anh_raw = chi_tiet.get("image") or (chi_tiet.get("images")[0] if chi_tiet.get("images") else "") or ""
+        if anh_raw and isinstance(anh_raw, str):
+            anh_raw = anh_raw.strip()
+            if anh_raw.startswith("//"):
+                anh_raw = f"https:{anh_raw}"
+            elif anh_raw.startswith("/"):
+                anh_raw = f"https://benthanhtourist.com{anh_raw}"
+            elif not anh_raw.startswith("http"):
+                anh_raw = f"https://benthanhtourist.com/{anh_raw}"
+        else:
+            anh_raw = ""
+
         # Text để tạo embedding — mô tả ngắn giúp vector search hiểu ngữ nghĩa
         mo_ta = re.sub("<[^>]+>", " ", chi_tiet.get("featured_description", ""))
         text_embedding = (
@@ -177,6 +190,9 @@ def dong_bo():
             documents.append(text_embedding)
             metadatas.append({
                 "id": id_duy_nhat,  # dùng làm key/dedup ở rag.py + Vue :key
+                # [GEMINI] T-002: Thêm tour_key và ảnh đại diện vào metadata
+                "tour_key": str(info["id_dai_dien"]),
+                "anh": str(anh_raw),
                 "ma_tour": info["ma_goc_dai_dien"],
                 "ten": chi_tiet["name"],
                 "url": f"https://benthanhtourist.com/tour/{slug}",

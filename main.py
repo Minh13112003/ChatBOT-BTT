@@ -9,6 +9,35 @@ from moderation import co_noi_dung_nhay_cam
 from llm_gemini import hoi_gemini, tom_tat_hoi_thoai
 from database import khoi_tao_database, luu_tin_nhan, lay_lich_su, kiem_tra_rate_limit
 
+# [GEMINI] T-002: Chuẩn hoá dữ liệu thẻ tour đúng Hợp đồng API
+def chuan_hoa_the_tour(tour: dict) -> dict:
+    gia = tour.get("gia")
+    if gia is not None:
+        try:
+            gia = int(gia)
+        except (ValueError, TypeError):
+            gia = None
+
+    anh = tour.get("anh")
+    if not anh or not str(anh).strip():
+        anh = None
+    else:
+        anh = str(anh).strip()
+
+    return {
+        "tour_key": str(tour.get("tour_key", "")),
+        "id": str(tour.get("id", "")),
+        "ten": str(tour.get("ten", "")),
+        "gia": gia,
+        "so_ngay": int(tour.get("so_ngay", 0)),
+        "ngay_khoi_hanh": str(tour.get("ngay_khoi_hanh", "")),
+        "so_cho_con": int(tour.get("so_cho_con", 0)),
+        "anh": anh,
+        "url": str(tour.get("url", "")),
+        "diem_den": str(tour.get("diem_den", "")),
+        "loai_hinh": str(tour.get("loai_hinh", "")),
+    }
+
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 khoi_tao_database()
@@ -56,7 +85,9 @@ def chat(req: ChatRequest):
             "handoff": {"zalo_url": ZALO_NHAN_VIEN_URL, "tom_tat": tom_tat},
         }
 
-    tours = tim_tour_lien_quan(req.message, lich_su=lich_su)
+    tours_raw = tim_tour_lien_quan(req.message, lich_su=lich_su)
+    # [GEMINI] T-002: Chuẩn hoá danh sách tour đúng Hợp đồng API
+    tours = [chuan_hoa_the_tour(t) for t in tours_raw]
     # Khách rõ ràng muốn tìm tour nhưng chưa nêu điều kiện gì cụ thể (không
     # điểm đến/ngân sách/thời gian) -> gợi ý câu hỏi làm rõ NGAY trên giao
     # diện (chip bấm nhanh), thay vì chỉ trông chờ AI tự hỏi ngược trong văn
