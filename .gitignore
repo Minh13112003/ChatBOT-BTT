@@ -1,5 +1,7 @@
 .env
 __pycache__/
+tests/ragas_results/
+tests/ragas_reports/
 *.pyc
 chatbot.sqlite3
 tour_db/

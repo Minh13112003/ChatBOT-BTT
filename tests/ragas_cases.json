@@ -1,0 +1,57 @@
+[
+  {
+    "id": "destination_thailand",
+    "question": "Có tour Thái Lan không?",
+    "expect": {"destination": "Thái Lan", "require_results": true}
+  },
+  {
+    "id": "destination_japan",
+    "question": "Tư vấn giúp mình tour Nhật Bản",
+    "expect": {"destination": "Nhật Bản", "require_results": true}
+  },
+  {
+    "id": "domestic_only",
+    "question": "Cho mình xem tour trong nước",
+    "expect": {"loai_hinh": "Trong Nước", "require_results": true}
+  },
+  {
+    "id": "international_only",
+    "question": "Cho mình xem tour nước ngoài",
+    "expect": {"loai_hinh": "Nước Ngoài", "require_results": true}
+  },
+  {
+    "id": "one_day_only",
+    "question": "Có tour nào đi 1 ngày không?",
+    "expect": {"so_ngay": 1, "require_results": true}
+  },
+  {
+    "id": "under_ten_million",
+    "question": "Tư vấn tour dưới 10 triệu",
+    "expect": {"gia_toi_da": 10500000, "require_results": true}
+  },
+  {
+    "id": "over_one_hundred_million",
+    "question": "Tìm giúp tour trên 100 triệu",
+    "expect": {"gia_toi_thieu": 100000000, "require_results": true}
+  },
+  {
+    "id": "exclude_thailand",
+    "question": "Mình muốn đi nước ngoài nhưng không đi Thái Lan",
+    "expect": {"loai_hinh": "Nước Ngoài", "khong_phai_diem_den": "Thái Lan", "require_results": true}
+  },
+  {
+    "id": "missing_destination",
+    "question": "Có tour Nam Cực không?",
+    "expect": {"empty": true}
+  },
+  {
+    "id": "greeting_has_no_tours",
+    "question": "Xin chào, bạn là ai?",
+    "expect": {"empty": true}
+  },
+  {
+    "id": "policy_has_no_tours",
+    "question": "Chính sách hoàn tiền tour như thế nào?",
+    "expect": {"empty": true}
+  }
+]

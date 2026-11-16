@@ -35,6 +35,12 @@
   .goi-y-nhanh { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .chip-nhanh { border: 1px solid #F0B8B8; border-radius: 100px; padding: 6px 12px; font-size: .78rem; background: #fff; color: #C81E23; cursor: pointer; }
   .chip-nhanh:hover { background: #FFF4F4; }
+  .nut-chon-dat { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .nut-chon-dat button { text-align: left; min-height: 44px; padding: 8px 14px; border: 1.5px solid #F0B8B8; border-radius: 14px; background: #fff; color: #C81E23; font-weight: 700; font-size: .85rem; cursor: pointer; }
+  .nut-chon-dat button:hover:not(:disabled) { background: #FFF4F4; }
+  .nut-chon-dat button.nut-dong-y { background: #C81E23; border-color: #C81E23; color: #fff; }
+  .nut-chon-dat button.nut-huy { color: #777; border-color: #ddd; }
+  .nut-chon-dat button:disabled { opacity: .55; cursor: not-allowed; }
 
   .the-handoff { display: block; margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: #E8F5EA; border: 1px solid #B7E0BE; text-decoration: none; color: #1d5a2e; }
   .the-handoff .nhan-zalo { display: flex; align-items: center; gap: 6px; font-weight: 700; color: #0b5f2f; }
@@ -51,12 +57,22 @@
 
   .khung-nhap { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; align-items: flex-end; }
   .khung-nhap textarea { flex: 1; padding: 10px 14px; border-radius: 18px; border: 1px solid #ddd; font-family: inherit; font-size: 1rem; resize: none; max-height: 120px; line-height: 1.4; }
+  .tep-dinh-kem { display: block; margin: 0 0 6px; }
+  .tep-dinh-kem img { display: block; max-width: 100%; max-height: 260px; border-radius: 10px; background: #fff; }
+  .tep-pdf { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 10px; border-radius: 10px; background: #fff; color: #222; text-decoration: none; font-size: .85rem; font-weight: 600; word-break: break-all; }
+  .nut-dinh-kem { width: 44px; height: 44px; padding: 0 !important; display: flex; align-items: center; justify-content: center; background: #fff !important; color: #E5252A !important; border: 1px solid #ddd !important; }
+  .nut-dinh-kem:disabled { color: #bbb !important; }
+  .luu-y-tep { padding: 0 16px 8px; font-size: .75rem; color: #777; }
   .khung-nhap button { border: none; border-radius: 100px; padding: 10px 18px; background: #E5252A; color: #fff; font-weight: 700; cursor: pointer; flex: none; }
   .khung-nhap button:disabled { background: #ccc; }
 
-  .token-bar { padding: 10px 16px; background: #FFF4E5; border-bottom: 1px solid #FFE0B2; display: flex; gap: 8px; align-items: center; font-size: 0.82rem; }
-  .token-bar input { flex: 1; padding: 6px 10px; border: 1px solid #FFCC80; border-radius: 6px; font-size: 0.82rem; }
-  .token-bar .curl-hint { font-size: 0.75rem; color: #888; padding: 4px 16px; background: #f9f9f9; border-bottom: 1px solid #eee; }
+  .form-khach { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; }
+  .form-khach label { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; font-weight: 600; color: #444; }
+  .form-khach input { min-height: 44px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 10px; font: inherit; font-weight: 400; }
+  .form-khach button { min-height: 44px; border: none; border-radius: 10px; background: #E5252A; color: #fff; font-weight: 700; cursor: pointer; }
+  .form-khach button:disabled { background: #ccc; }
+  .form-khach .loi { margin: 0; font-size: .82rem; color: #B30118; }
+  .nhan-nhan-vien { display: block; margin-bottom: 2px; font-size: .75rem; font-weight: 700; color: #B30118; }
 
 </style>
 </head>
@@ -66,18 +82,14 @@
     <div class="thanh-tieu-de">
       <div>bttAI — BenThanh Tourist</div>
     </div>
-    <div class="token-bar">
-      <span>🔑 Token:</span>
-      <input v-model="tokenAuth" placeholder="Dán accessToken NestJS (Bearer) để test..." @input="luuToken">
-    </div>
-    <div class="curl-hint">
-      💡 <i>Test curl:</i> <code>curl -X POST http://localhost:8001/chat -H "Authorization: Bearer &lt;token&gt;" -d '{"message":"...","conversation_id":"UUID"}'</code>
-    </div>
 
     <div class="khung-tin-nhan" ref="khungTinNhan">
       <div v-for="(tin, i) in danhSachTinNhan" :key="i" class="dong" :class="tin.vaiTro === 'user' ? 'khach' : 'bot'">
-        <div class="bong-bong">
-          {{ tin.noiDung }}<span v-if="tin.dangGoChu" class="con-tro-go"></span>
+        <div class="bong-bong"><span v-if="tin.nhanVien" class="nhan-nhan-vien">Nhân viên BenThanh Tourist</span>
+          <a v-if="tin.tep" class="tep-dinh-kem" :href="tin.tep.url" target="_blank" rel="noopener">
+            <img v-if="tin.tep.type.startsWith('image/')" :src="tin.tep.url" :alt="tin.tep.name" loading="lazy" @load="cuonXuongDuoi">
+            <span v-else class="tep-pdf">PDF · {{ tin.tep.name }}</span>
+          </a>{{ tin.noiDung }}<span v-if="tin.dangGoChu" class="con-tro-go"></span>
           <template v-if="!tin.dangGoChu">
             <a v-for="t in tin.tours" :key="t.id" class="the-tour" :href="t.url" target="_blank">
               <b>{{ t.ten }}</b>{{ t.gia != null ? t.gia.toLocaleString('vi-VN') + 'đ' : 'Xem chi tiết' }}
@@ -92,6 +104,14 @@
                 :disabled="dangChoPhanHoi"
                 @click="guiCauHoi(cau)"
               >{{ cau }}</button>
+            </div>
+            <div v-if="tin.choices && tin.choices.length" class="nut-chon-dat">
+              <button
+                v-for="c in tin.choices" :key="c.id" type="button"
+                :class="{ 'nut-dong-y': c.id === 'xn:dong_y', 'nut-huy': c.id === 'huy' }"
+                :disabled="dangChoPhanHoi || tin.daTraLoi || i !== danhSachTinNhan.length - 1"
+                @click="guiCauHoi(c.label, { id: c.id, label: c.label }, tin)"
+              >{{ c.label }}</button>
             </div>
             <a v-if="tin.handoff" class="the-handoff" :href="tin.handoff.zalo_url" target="_blank">
               <span class="nhan-zalo">💬 Nhắn Zalo nhân viên CSKH ngay</span>
@@ -108,6 +128,18 @@
       </div>
     </div>
 
+    <form v-if="!daDinhDanh" class="form-khach" @submit.prevent="guiThongTin">
+      <label>Họ và tên
+        <input v-model="tenKhach" autocomplete="name" maxlength="120" required>
+      </label>
+      <label>Số điện thoại
+        <input v-model="sdtKhach" type="tel" autocomplete="tel" maxlength="30" required>
+      </label>
+      <p v-if="loiDinhDanh" class="loi" role="alert">{{ loiDinhDanh }}</p>
+      <button :disabled="dangGuiThongTin">{{ dangGuiThongTin ? 'Đang gửi...' : 'Bắt đầu trò chuyện' }}</button>
+    </form>
+
+    <template v-else>
     <div class="goi-y">
       <div class="goi-y-tieu-de" @click="moGoiY = !moGoiY">
         <span>Gợi ý câu hỏi</span>
@@ -123,18 +155,24 @@
       </div>
     </div>
 
+    <div class="luu-y-tep">Bạn có thể gửi ảnh (JPG, PNG, WebP) hoặc PDF cho nhân viên. Vui lòng không gửi ảnh CCCD, hộ chiếu nếu chưa cần thiết.</div>
     <form class="khung-nhap" @submit.prevent="guiCauHoi()">
+      <input ref="oChonTep" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden @change="chonTep">
+      <button type="button" class="nut-dinh-kem" :disabled="dangChoPhanHoi" aria-label="Đính kèm ảnh hoặc PDF" @click="oChonTep.click()">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 12-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>
+      </button>
       <textarea
         ref="oNhap"
         v-model="cauHoiDangNhap"
         :disabled="dangChoPhanHoi"
-        placeholder="Nhập câu hỏi test..."
+        placeholder="Nhập câu hỏi của bạn..."
         rows="1"
         @input="tuGianONhap"
         @keydown.enter.exact.prevent="guiCauHoi()"
       ></textarea>
       <button :disabled="dangChoPhanHoi">{{ dangChoPhanHoi ? '...' : 'Gửi' }}</button>
     </form>
+    </template>
   </div>
 </div>
 
@@ -145,19 +183,117 @@ createApp({
   setup() {
     let conversationId = ref(localStorage.getItem("bttai_conversation_id") || crypto.randomUUID());
     localStorage.setItem("bttai_conversation_id", conversationId.value);
-    const tokenAuth = ref(localStorage.getItem("bttai_bearer_token") || "");
 
-    function luuToken() {
-      localStorage.setItem("bttai_bearer_token", tokenAuth.value);
+    // Bộ nhớ trình duyệt có thể bị chặn (tab ẩn danh): lỗi đọc ghi không được làm hỏng trang.
+    function docKho(khoa) {
+      try { return localStorage.getItem(khoa); } catch (e) { return null; }
+    }
+    function ghiKho(khoa, giaTri) {
+      try {
+        if (giaTri === null) localStorage.removeItem(khoa);
+        else localStorage.setItem(khoa, giaTri);
+      } catch (e) {}
     }
 
-    const danhSachTinNhan = ref([
-      {
-        vaiTro: "bot",
-        noiDung: "Xin chào mọi người đã đến với BenThanh Tourist, tôi là bttAI, bạn hãy cho tôi biết là bạn cần gì về tour du lịch hôm nay nào?",
-        tours: [],
-      },
+    // Mã ngẫu nhiên theo thiết bị. Khách web không đăng nhập, máy chủ nhận ra khách qua mã này.
+    const maThietBi = docKho("bttai_device_id") || crypto.randomUUID();
+    ghiKho("bttai_device_id", maThietBi);
+
+    const CAU_CHAO = "Xin chào, mình là bttAI, trợ lý tour của BenThanh Tourist. Bạn cho mình xin họ tên và số điện thoại để thuận tiện cho việc tư vấn và liên hệ nhé.";
+    const CAU_MOI_HOI = "Cảm ơn bạn. Bạn muốn đi đâu, vào tháng nào và ngân sách khoảng bao nhiêu?";
+    const BA_NGAY_MS = 3 * 24 * 3600 * 1000;
+
+    function docTinDaLuu() {
+      try {
+        const tin = JSON.parse(docKho("bttai_tin_nhan") || "[]");
+        return Array.isArray(tin) ? tin.filter((t) => Date.now() - (t.luc || 0) < BA_NGAY_MS) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    function luuTin() {
+      const giuLai = danhSachTinNhan.value.filter((t) => !t.dangGoChu).slice(-50).map((t) => (t.tamThoi && t.tep ? { ...t, tep: null, noiDung: t.noiDung || "[Bạn đã gửi một file]" } : t));
+      ghiKho("bttai_tin_nhan", JSON.stringify(giuLai));
+    }
+
+    const daDinhDanh = ref(docKho("bttai_da_dinh_danh") === "1");
+    const tenKhach = ref("");
+    const sdtKhach = ref("");
+    const loiDinhDanh = ref("");
+    const dangGuiThongTin = ref(false);
+    const tinDaLuu = daDinhDanh.value ? docTinDaLuu() : [];
+    const danhSachTinNhan = ref(tinDaLuu.length ? tinDaLuu : [
+      { vaiTro: "bot", noiDung: daDinhDanh.value ? CAU_MOI_HOI : CAU_CHAO, tours: [], luc: Date.now() },
     ]);
+
+    // Tin nhân viên trả lời từ trang quản trị. Con trỏ do máy chủ cấp nên không phụ thuộc đồng hồ của máy khách.
+    let conTro = docKho("bttai_con_tro");
+    let dangHoiTinNhanVien = false;
+    let daBatHoiTin = false;
+    async function hoiTinNhanVien() {
+      if (dangHoiTinNhanVien) return;
+      dangHoiTinNhanVien = true;
+      try {
+        const thamSo = new URLSearchParams({ device_id: maThietBi });
+        if (conTro) thamSo.set("after", conTro);
+        const res = await fetch("/web/updates?" + thamSo);
+        if (!res.ok) return;
+        const data = await res.json();
+        conTro = data.cursor || conTro;
+        if (conTro) ghiKho("bttai_con_tro", conTro);
+        if (data.items && data.items.length) {
+          for (const t of data.items) {
+            danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: t.text, tours: [], nhanVien: true, tep: t.attachment || null, luc: Date.now() });
+          }
+          luuTin();
+          cuonXuongDuoi();
+        }
+      } catch (e) {
+        // Lỗi mạng: lần sau hỏi lại từ mốc cũ.
+      } finally {
+        dangHoiTinNhanVien = false;
+      }
+    }
+    function batDauNhanTinNhanVien() {
+      if (daBatHoiTin) return;
+      daBatHoiTin = true;
+      hoiTinNhanVien();
+      setInterval(hoiTinNhanVien, 5000);
+    }
+
+    async function guiThongTin() {
+      if (dangGuiThongTin.value) return;
+      dangGuiThongTin.value = true;
+      loiDinhDanh.value = "";
+      try {
+        const res = await fetch("/web/identify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ device_id: maThietBi, name: tenKhach.value, phone: sdtKhach.value }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          loiDinhDanh.value = data.message || "Thông tin chưa hợp lệ, bạn kiểm tra lại giúp mình nhé.";
+          return;
+        }
+        // Máy khác nhập trùng số: không hiện tin cũ, chỉ nhận tin nhân viên gửi từ bây giờ.
+        if (!data.load_history) {
+          conTro = null;
+          ghiKho("bttai_con_tro", null);
+        }
+        daDinhDanh.value = true;
+        ghiKho("bttai_da_dinh_danh", "1");
+        danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: CAU_MOI_HOI, tours: [], luc: Date.now() });
+        luuTin();
+        batDauNhanTinNhanVien();
+        cuonXuongDuoi();
+      } catch (e) {
+        loiDinhDanh.value = "Mình chưa kết nối được. Bạn kiểm tra mạng rồi thử lại nhé.";
+      } finally {
+        dangGuiThongTin.value = false;
+      }
+    }
+    if (daDinhDanh.value) batDauNhanTinNhanVien();
     const cauHoiDangNhap = ref("");
     const dangChoPhanHoi = ref(false);
     // Riêng cho bong bóng "đang suy nghĩ" — bật khi vừa gửi request, tắt
@@ -239,10 +375,68 @@ createApp({
       });
     }
 
-    async function guiCauHoi(cauGoiY) {
+    const oChonTep = ref(null);
+    const GIOI_HAN_ANH = 10 * 1024 * 1024;
+    const GIOI_HAN_PDF = 20 * 1024 * 1024;
+    async function chonTep(e) {
+      const tep = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (!tep || dangChoPhanHoi.value) return;
+      const laAnh = ["image/jpeg", "image/png", "image/webp"].includes(tep.type);
+      let loi = "";
+      if (!laAnh && tep.type !== "application/pdf") loi = "Chỉ gửi được ảnh (JPG, PNG, WebP) hoặc file PDF.";
+      else if (laAnh && tep.size > GIOI_HAN_ANH) loi = "Ảnh quá lớn, tối đa 10 MB.";
+      else if (!laAnh && tep.size > GIOI_HAN_PDF) loi = "File PDF quá lớn, tối đa 20 MB.";
+      if (loi) {
+        danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: loi, tours: [], luc: Date.now() });
+        return cuonXuongDuoi();
+      }
+      const chu = cauHoiDangNhap.value.trim();
+      // Ảnh xem trước dùng đường dẫn tạm của trình duyệt; không lưu vào kho vì đường dẫn này mất khi tải lại trang.
+      danhSachTinNhan.value.push({ vaiTro: "user", noiDung: chu, tep: { url: laAnh ? URL.createObjectURL(tep) : "#", type: tep.type, name: tep.name }, tamThoi: true, luc: Date.now() });
+      cauHoiDangNhap.value = "";
+      nextTick(tuGianONhap);
+      dangChoPhanHoi.value = true;
+      dangChoPhanHoiTuServer.value = true;
+      cuonXuongDuoi();
+      try {
+        const f = new FormData();
+        f.append("device_id", maThietBi);
+        f.append("message", chu);
+        f.append("file", tep);
+        const res = await fetch("/web/attachment", { method: "POST", body: f });
+        if (res.status === 403) {
+          daDinhDanh.value = false;
+          ghiKho("bttai_da_dinh_danh", null);
+          danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: CAU_CHAO, tours: [], luc: Date.now() });
+          return;
+        }
+        let data = null;
+        try { data = await res.json(); } catch (e) { /* không phải JSON */ }
+        if (!res.ok) {
+          const loiMay = (data && data.message) || (res.status === 429 ? "Bạn thao tác hơi nhanh, thử lại sau ít phút nhé." : "Hiện chưa gửi được ảnh hoặc file, bạn thử lại sau ít phút nhé.");
+          danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: loiMay, tours: [], luc: Date.now() });
+          return;
+        }
+        if (data.che_do === "STAFF" && !data.reply) return;
+        danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: data.reply, tours: [], luc: Date.now() });
+      } catch (e) {
+        danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: "Mình chưa kết nối được. Bạn kiểm tra mạng rồi thử lại nhé.", tours: [], luc: Date.now() });
+      } finally {
+        luuTin();
+        dangChoPhanHoiTuServer.value = false;
+        dangChoPhanHoi.value = false;
+        cuonXuongDuoi();
+      }
+    }
+
+    // hanhDong: nút của luồng đặt tour ({ id, label }); tinCoNut: tin chứa nút, khoá lại để không bấm lại nút của bước cũ.
+    async function guiCauHoi(cauGoiY, hanhDong, tinCoNut) {
       const cauHoi = (cauGoiY ?? cauHoiDangNhap.value).trim();
       if (!cauHoi || dangChoPhanHoi.value) return;
-      danhSachTinNhan.value.push({ vaiTro: "user", noiDung: cauHoi });
+      if (tinCoNut) tinCoNut.daTraLoi = true;
+      danhSachTinNhan.value.push({ vaiTro: "user", noiDung: cauHoi, luc: Date.now() });
+      luuTin();
       cauHoiDangNhap.value = "";
       nextTick(tuGianONhap); // gửi xong -> ô nhập rỗng -> co lại về 1 dòng
       dangChoPhanHoi.value = true;
@@ -250,21 +444,15 @@ createApp({
       cuonXuongDuoi();
 
       if (cauHoi === "/clear") {
-        try {
-          if (tokenAuth.value.trim()) {
-            await fetch("/chat/" + conversationId.value, {
-              method: "DELETE",
-              headers: { "Authorization": "Bearer " + tokenAuth.value.trim() },
-            });
-          }
-        } catch (e) {}
         conversationId.value = crypto.randomUUID();
         localStorage.setItem("bttai_conversation_id", conversationId.value);
         danhSachTinNhan.value = [{
           vaiTro: "bot",
           noiDung: "Đã làm mới cuộc trò chuyện. Bạn cần tư vấn tour gì ạ?",
           tours: [],
+          luc: Date.now(),
         }];
+        luuTin();
         dangChoPhanHoiTuServer.value = false;
         dangChoPhanHoi.value = false;
         cuonXuongDuoi();
@@ -272,41 +460,47 @@ createApp({
       }
 
       try {
-        const headers = { "Content-Type": "application/json" };
-        if (tokenAuth.value.trim()) {
-          headers["Authorization"] = "Bearer " + tokenAuth.value.trim();
-        }
-        const res = await fetch("/chat", {
+        const res = await fetch("/web/chat", {
           method: "POST",
-          headers: headers,
-          body: JSON.stringify({ conversation_id: conversationId.value, message: cauHoi }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            device_id: maThietBi, conversation_id: conversationId.value,
+            ...(hanhDong ? { message: "", action: { id: hanhDong.id, label: hanhDong.label } } : { message: cauHoi }),
+          }),
         });
 
-        if (res.status === 401) {
-          dangChoPhanHoiTuServer.value = false;
-          danhSachTinNhan.value.push({
-            vaiTro: "bot",
-            noiDung: "⚠️ Phiên đăng nhập đã hết hạn hoặc chưa có Token. Vui lòng dán Access Token NestJS ở ô trên cùng để tiếp tục.",
-            tours: [],
-          });
+        if (res.status === 403) {
+          // Máy chủ chưa có tên + SĐT của thiết bị này: hỏi lại, không giải đáp.
+          daDinhDanh.value = false;
+          ghiKho("bttai_da_dinh_danh", null);
+          danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: CAU_CHAO, tours: [], luc: Date.now() });
+          return;
+        }
+        if (!res.ok) {
+          danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: res.status === 429 ? "Bạn thao tác hơi nhanh, thử lại sau ít phút nhé." : "Trợ lý đang bận, bạn thử lại sau ít phút nhé.", tours: [], luc: Date.now() });
           return;
         }
 
         const data = await res.json();
+        // Nhân viên đang xử lý: bot im lặng, tin nhân viên đến qua hoiTinNhanVien().
+        if (data.che_do === "STAFF" && !data.reply) return;
         dangChoPhanHoiTuServer.value = false; // tắt "đang suy nghĩ", chuyển sang gõ chữ
-        danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: "", tours: data.tours, goiY: data.goi_y, handoff: data.handoff, dangGoChu: true });
+        danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: "", tours: data.tours, goiY: data.goi_y, choices: data.choices, handoff: data.handoff, dangGoChu: true, luc: Date.now() });
         // Lấy lại tham chiếu TỪ mảng reactive (không dùng object vừa tạo ở trên)
         // để chắc chắn Vue theo dõi đúng thay đổi khi gõ dần từng ký tự.
         const tin = danhSachTinNhan.value[danhSachTinNhan.value.length - 1];
         await goChuDan(tin, data.reply);
+      } catch (e) {
+        danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: "Mình chưa kết nối được. Bạn kiểm tra mạng rồi thử lại nhé.", tours: [], luc: Date.now() });
       } finally {
+        luuTin();
         dangChoPhanHoiTuServer.value = false;
         dangChoPhanHoi.value = false;
         cuonXuongDuoi();
       }
     }
 
-    return { danhSachTinNhan, cauHoiDangNhap, dangChoPhanHoi, dangChoPhanHoiTuServer, khungTinNhan, oNhap, tuGianONhap, moGoiY, cacCauGoiY, guiCauHoi, ngayKhoiHanhGanNhat, nhanNgayKhoiHanh, nhanConCho, tokenAuth, luuToken };
+    return { oChonTep, chonTep, danhSachTinNhan, cauHoiDangNhap, dangChoPhanHoi, dangChoPhanHoiTuServer, khungTinNhan, oNhap, tuGianONhap, moGoiY, cacCauGoiY, guiCauHoi, ngayKhoiHanhGanNhat, nhanNgayKhoiHanh, nhanConCho, daDinhDanh, tenKhach, sdtKhach, loiDinhDanh, dangGuiThongTin, guiThongTin };
   },
 }).mount("#app");
 </script>

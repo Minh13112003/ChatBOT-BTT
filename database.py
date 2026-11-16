@@ -24,6 +24,16 @@ def khoi_tao_database():
                 clicked_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        # Khách web không đăng nhập đã để lại tên + SĐT. Không tự xoá sau 3 ngày để khách quay lại không phải nhập lại.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS web_khach (
+                device_id TEXT PRIMARY KEY,
+                ten TEXT NOT NULL,
+                sdt TEXT NOT NULL,
+                doc_tu TEXT,  -- mốc sớm nhất thiết bị này được đọc tin nhân viên (máy khác nhập trùng số không đọc được tin cũ)
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session ON chat_messages(session_id)")
         # [GEMINI] T-003: Đảm bảo có cột user_id và index
         cursor = conn.execute("PRAGMA table_info(chat_messages)")
@@ -54,6 +64,29 @@ def luu_tin_nhan(session_id: str, role: str, content: str, user_id: str | None =
             "INSERT INTO chat_messages (session_id, user_id, role, content) VALUES (?, ?, ?, ?)",
             (session_id, user_id, role, content),
         )
+
+
+def luu_khach_web(device_id: str, ten: str, sdt: str, doc_tu: str | None) -> None:
+    """`doc_tu` = None: đúng thiết bị cũ, giữ nguyên mốc đang có."""
+    with ket_noi() as conn:
+        conn.execute(
+            "INSERT INTO web_khach (device_id, ten, sdt, doc_tu) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(device_id) DO UPDATE SET ten = excluded.ten, sdt = excluded.sdt, "
+            "doc_tu = COALESCE(excluded.doc_tu, doc_tu), updated_at = datetime('now')",
+            (device_id, ten, sdt, doc_tu),
+        )
+
+
+def lay_moc_doc_web(device_id: str) -> str | None:
+    with ket_noi() as conn:
+        row = conn.execute("SELECT doc_tu FROM web_khach WHERE device_id = ?", (device_id,)).fetchone()
+    return row[0] if row else None
+
+
+def lay_khach_web(device_id: str) -> dict | None:
+    with ket_noi() as conn:
+        row = conn.execute("SELECT ten, sdt FROM web_khach WHERE device_id = ?", (device_id,)).fetchone()
+    return {"name": row[0], "phone": row[1]} if row else None
 
 
 def lay_lich_su(session_id: str, so_luot: int) -> list[dict]:

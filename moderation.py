@@ -1,6 +1,6 @@
 import re
 import unicodedata
-from rules import TU_KHOA_CAM_DE_TRUNG_TU_THUONG, TU_KHOA_CAM_AN_TOAN
+from rules import TU_KHOA_CAM_DE_TRUNG_TU_THUONG, TU_KHOA_CAM_AN_TOAN, TU_KHOA_CAM_CHI_KHI_CAU_CO_DAU
 
 
 def chuan_hoa(text: str) -> str:
@@ -16,7 +16,9 @@ def chuan_hoa(text: str) -> str:
 def chuan_hoa_giu_dau(text: str) -> str:
     """Chữ thường, gộp khoảng trắng, bỏ ký tự chèn giữa để né filter kiểu
     "đ. ụ" — nhưng GIỮ NGUYÊN dấu thanh, để "đụ" không lẫn với "du"."""
-    text = text.lower()
+    # Bàn phím iPhone/macOS có thể gửi chữ dạng tổ hợp (NFD: chữ cái + dấu rời) — phải gộp về NFC trước, nếu không
+    # dấu rời bị regex bên dưới xoá mất: "ngủ" thành "ngu" (chặn nhầm), "lồn" thành "lon" (lọt).
+    text = unicodedata.normalize("NFC", text).lower()
     text = re.sub(r"[^a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ0-9\s]", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
@@ -57,4 +59,11 @@ def co_noi_dung_nhay_cam(cau_hoi: str) -> bool:
         return True
 
     da_chuan_hoa_giu_dau = chuan_hoa_giu_dau(cau_hoi)
-    return _khop_tu_khoa(da_chuan_hoa_giu_dau, da_chuan_hoa_giu_dau.split(), _TU_KHOA_DE_TRUNG_DA_CHUAN_HOA)
+    tu_rieng = da_chuan_hoa_giu_dau.split()
+    if _khop_tu_khoa(da_chuan_hoa_giu_dau, tu_rieng, _TU_KHOA_DE_TRUNG_DA_CHUAN_HOA):
+        return True
+
+    # Từ chỉ chặn khi câu đang gõ CÓ DẤU (hoặc cả tin nhắn chỉ có đúng từ đó) — xem TU_KHOA_CAM_CHI_KHI_CAU_CO_DAU.
+    if any(tu in tu_rieng for tu in TU_KHOA_CAM_CHI_KHI_CAU_CO_DAU):
+        return da_chuan_hoa_giu_dau != da_chuan_hoa or len(tu_rieng) == 1
+    return False

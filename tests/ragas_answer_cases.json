@@ -1,0 +1,27 @@
+[
+  {
+    "id": "thailand_budget",
+    "question": "Tư vấn giúp mình tour Thái Lan dưới 10 triệu",
+    "rubric": "Nêu được tư vấn phù hợp với yêu cầu Thái Lan và ngân sách; không tự bịa tour, giá hoặc ngày khởi hành ngoài các thẻ tour được cung cấp."
+  },
+  {
+    "id": "one_day_tour",
+    "question": "Có tour nào đi 1 ngày không?",
+    "rubric": "Trả lời thân thiện, có thể giới thiệu tour 1 ngày từ thẻ tour; không nhắc tour sai thời lượng hoặc bịa thông tin."
+  },
+  {
+    "id": "missing_destination",
+    "question": "Có tour Nam Cực không?",
+    "rubric": "Nói rõ hiện chưa tìm thấy tour Nam Cực; không khẳng định đang có tour Nam Cực và không bịa dữ liệu."
+  },
+  {
+    "id": "policy_without_cards",
+    "question": "Chính sách hoàn tiền tour như thế nào?",
+    "rubric": "Trả lời thận trọng hoặc hướng dẫn khách liên hệ nhân viên để xác nhận chính sách; không bịa điều khoản hoàn tiền và không nói có thẻ tour khi không có."
+  },
+  {
+    "id": "excluded_destination",
+    "question": "Mình muốn đi nước ngoài nhưng không đi Thái Lan",
+    "rubric": "Tư vấn tour nước ngoài không phải Thái Lan; không giới thiệu tour Thái Lan và không bịa thông tin ngoài thẻ tour."
+  }
+]

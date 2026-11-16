@@ -2,5 +2,7 @@ fastapi
 uvicorn
 openai
 httpx
+python-multipart
 chromadb
 python-dotenv
+psycopg[binary]

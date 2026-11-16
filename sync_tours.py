@@ -3,7 +3,7 @@ import httpx
 import chromadb
 from config import (
     BENTHANH_API_BASE, BENTHANH_HEADERS, CATEGORY_IDS_LOAI_HINH,
-    CHROMA_PATH, CHROMA_COLLECTION,
+    CHROMA_PATH, CHROMA_COLLECTION, NESTJS_BASE_URL,
 )
 
 
@@ -90,7 +90,69 @@ def lay_chi_tiet_tour(tour_id: str, so_lan_thu_lai: int = 3) -> dict:
     raise loi_gan_nhat
 
 
+def _chuan_hoa_ten(ten: str) -> str:
+    """Khoá so khớp tên tour giữa 2 kho dữ liệu (Laravel và NestJS) — gộp
+    khoảng trắng thừa + bỏ phân biệt hoa thường. Bảng Tour bên NestJS được
+    seed từ chính benthanhtourist.com nên tên trùng khớp; chỉ cần chống lệch
+    khoảng trắng/viết hoa."""
+    return " ".join(str(ten or "").split()).casefold()
+
+
+def lay_the_loai_theo_ten() -> dict[str, str]:
+    """Map "tên tour -> thể loại" lấy từ backend NestJS (`GET /api/v1/tours`,
+    endpoint công khai không cần token). Thể loại là thứ bên kinh doanh gắn
+    ("TOUR OF THE YEAR 2026", "TOUR CAO CẤP", "TOUR MICE"...) và KHÔNG có
+    trong dữ liệu Laravel, nên phải lấy từ đây rồi gắn vào ChromaDB.
+
+    Một tour có thể thuộc nhiều thể loại (`tourTypes` là mảng; `tourType` là
+    cột cũ 1 giá trị) -> nối bằng "|", rag.thuoc_the_loai() tách lại.
+
+    Không với tới được backend (chưa bật, đổi tunnel, mất mạng) thì trả {}
+    và đồng bộ vẫn chạy bình thường với thể loại rỗng — KHÔNG để việc này
+    làm hỏng cả lần đồng bộ, vì dữ liệu tour chính vẫn lấy từ Laravel.
+    """
+    if not NESTJS_BASE_URL:
+        print("⚠ Chưa cấu hình NESTJS_BASE_URL — bỏ qua thể loại tour.")
+        return {}
+
+    theo_ten: dict[str, str] = {}
+    goc = NESTJS_BASE_URL.rstrip("/")
+    try:
+        trang = 1
+        while True:
+            resp = httpx.get(
+                f"{goc}/api/v1/tours",
+                params={"page": trang, "limit": 100},
+                headers={"Accept": "application/json"},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            than = payload.get("data", payload) if isinstance(payload, dict) else {}
+            muc = than.get("items", than) if isinstance(than, dict) else than
+            if not isinstance(muc, list) or not muc:
+                break
+            for t in muc:
+                cac_loai = [str(x).strip() for x in (t.get("tourTypes") or []) if str(x).strip()]
+                if not cac_loai and t.get("tourType"):
+                    cac_loai = [str(t["tourType"]).strip()]
+                if cac_loai:
+                    theo_ten[_chuan_hoa_ten(t.get("name"))] = "|".join(cac_loai)
+            meta = than.get("meta") if isinstance(than, dict) else None
+            if not isinstance(meta, dict) or not meta.get("hasNext"):
+                break
+            trang += 1
+    except Exception as e:
+        print(f"⚠ Không lấy được thể loại tour từ NestJS ({type(e).__name__}) — đồng bộ tiếp với thể loại rỗng.")
+        return {}
+
+    print(f"Lấy được thể loại cho {len(theo_ten)} tour từ NestJS.")
+    return theo_ten
+
+
 def dong_bo():
+    the_loai_theo_ten = lay_the_loai_theo_ten()
+
     # Bước 1+2 — gom tour thô từ các category loại hình, gộp theo TÊN TOUR
     # (không gộp theo mã gốc cắt từ code — đã kiểm tra dữ liệu thật và phát
     # hiện bug: nhiều tour KHÁC HÀNH TRÌNH lại trùng ngẫu nhiên cùng mã gốc,
@@ -168,6 +230,18 @@ def dong_bo():
             d for d in chi_tiet.get("tour_days", [])
             if d.get("is_available") and d.get("stock_qty", 0) > 0
         ]
+        # Đợt khởi hành ở CẤP GỐC của /api/tour/item (đợt gần nhất) có thể KHÔNG nằm trong tour_days[] (dữ liệu
+        # Laravel hay lệch) — luồng đặt tour (dat_tour.cac_dot_khoi_hanh) có gộp đợt này, nên thẻ tour cũng phải có,
+        # nếu không thẻ hiện ngày/giá khác với lúc đặt (vd Hokkaido thẻ 04/01/2027 60,99tr, lúc đặt có 07/12/2026 58,99tr).
+        goc_con_cho = chi_tiet.get("is_available") and (chi_tiet.get("stock_qty") or 0) > 0
+        ngay_goc = str(chi_tiet.get("departure_date") or "")[:10]
+        if goc_con_cho and ngay_goc and ngay_goc not in {str(d.get("departure_date") or "")[:10] for d in cac_luot_con_cho}:
+            cac_luot_con_cho.append({
+                "id": chi_tiet.get("id"),
+                "departure_date": chi_tiet["departure_date"],
+                "price": chi_tiet["price"],
+                "stock_qty": chi_tiet.get("stock_qty", 0),
+            })
         # Phòng trường hợp tour không còn lượt nào (hết chỗ toàn bộ) — vẫn lập
         # 1 record với ngày/giá của id_dai_dien để không mất tour khỏi ChromaDB.
         # Lưu ý: "tour_days" rỗng KHÔNG đồng nghĩa hết chỗ — đã xác nhận bug
@@ -186,6 +260,8 @@ def dong_bo():
             # id của từng LƯỢT khởi hành (không phải id_dai_dien của tour) —
             # đảm bảo duy nhất per lượt, cần thiết vì giờ 1 tour ứng nhiều record.
             id_duy_nhat = str(luot.get("id") or info["id_dai_dien"])
+            if id_duy_nhat in ids:
+                id_duy_nhat += "-goc"  # id đợt cấp gốc trùng id một đợt tour_days (hiếm) -> vẫn phải duy nhất
             ids.append(id_duy_nhat)
             documents.append(text_embedding)
             metadatas.append({
@@ -205,6 +281,10 @@ def dong_bo():
                 # để tạo cảm giác khan hiếm/thúc đẩy đặt sớm (0 nếu tour rơi vào
                 # nhánh "hết chỗ toàn bộ" ở trên, không có field stock_qty thật).
                 "so_cho_con": luot.get("stock_qty", 0),
+                # Thể loại kinh doanh gắn cho tour (nguồn NestJS, nối bằng "|").
+                # Rỗng khi backend không với tới được lúc đồng bộ — rag.py coi
+                # như tour chưa được xếp thể loại, không làm hỏng tìm kiếm khác.
+                "the_loai": the_loai_theo_ten.get(_chuan_hoa_ten(chi_tiet["name"]), ""),
             })
 
     # Ghi vào ChromaDB — xoá sạch rồi tạo lại thay vì chỉ upsert, vì mỗi lượt
