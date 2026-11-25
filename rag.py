@@ -8,7 +8,7 @@ import unicodedata
 import chromadb
 from config import CHROMA_PATH, CHROMA_COLLECTION
 from rules import (
-    TOP_K_TOURS, VUOT_NGAN_SACH_TOI_DA, TEN_TOUR_DOC_LA, ALIAS_DIEM_DEN, DIA_DANH_PHO_BIEN,
+    TOP_K_TOURS, VUOT_NGAN_SACH_TOI_DA, TEN_TOUR_DOC_LA, ALIAS_DIEM_DEN, ALIAS_LOAI_TRU, DIA_DANH_PHO_BIEN,
     TU_KHOA_CAN_NHAN_VIEN, TU_KHOA_TIEN_HOP_DONG, TU_KHOA_DA_DAT, TU_KHOA_HOI_CHINH_SACH, TU_KHOA_Y_MUON, TU_KHOA_DANG_HOI,
     VUNG_DIEM_DEN, THE_LOAI_TOUR, TU_KHOA_TOUR_BIEN, DAU_HIEU_TOUR_BIEN,
 )
@@ -17,13 +17,22 @@ _client = chromadb.PersistentClient(path=CHROMA_PATH)
 _collection = _client.get_or_create_collection(CHROMA_COLLECTION)
 
 
+# Chỉ gợi ý lượt khởi hành từ 3 ngày sau hôm nay trở đi (chủ dự án chốt 19/11/2026): sát ngày thì sale không kịp chốt, làm giấy tờ
+# (bug thật: ngày 19/11 bot gợi ý tour Hồng Kông khởi hành chính ngày 19/11).
+SO_NGAY_BAO_TRUOC_GOI_Y = 3
+
+
+def ngay_som_nhat_goi_y() -> str:
+    return (date.today() + timedelta(days=SO_NGAY_BAO_TRUOC_GOI_Y)).isoformat()
+
+
 def _con_han(m: dict) -> bool:
-    return str(m.get("ngay_khoi_hanh") or "")[:10] >= date.today().isoformat()
+    return str(m.get("ngay_khoi_hanh") or "")[:10] >= ngay_som_nhat_goi_y()
 
 
 def tat_ca_luot_con_han() -> list[dict]:
-    """Mọi lượt khởi hành chưa qua ngày. Dữ liệu Chroma chỉ đổi khi chạy sync_tours.py nên phải lọc lúc đọc: lượt quá
-    hạn tự ẩn, không cần đồng bộ lại (bug thật: thẻ tour ghi khởi hành 25/10 khi đã sang tháng 11)."""
+    """Mọi lượt khởi hành từ SO_NGAY_BAO_TRUOC_GOI_Y ngày sau trở đi. Dữ liệu Chroma chỉ đổi khi chạy sync_tours.py nên phải lọc lúc
+    đọc: lượt quá hạn tự ẩn, không cần đồng bộ lại (bug thật: thẻ tour ghi khởi hành 25/10 khi đã sang tháng 11)."""
     return [m for m in _collection.get()["metadatas"] if _con_han(m)]
 
 
@@ -329,6 +338,8 @@ def trich_dieu_kien_so_ngay(cau_hoi: str) -> tuple[str, int] | None:
     (toan_tu, so_ngay) với toan_tu là ">=" (tối thiểu/trở lên), "<=" (tối đa/
     dưới), hoặc "==" (đúng N ngày, khi khách nêu rõ dạng "N ngày M đêm")."""
     cau_hoi_thuong = cau_hoi.lower()
+    # "đặt trước 10 ngày", "sớm 7 ngày", "cách 3 ngày" là khoảng thời gian, không phải số ngày của tour (bug thật: bị hiểu là "tour 10 ngày").
+    cau_hoi_thuong = re.sub(r"(trước|truoc|sớm|som|cách|cach)\s*\d+\s*ngày", " ", cau_hoi_thuong)
 
     # "3n2d", "4N3Đ" (viết tắt ngày-đêm) và "đi trong ngày" (= 1 ngày)
     m = re.search(r"(?<!\w)(\d{1,2})\s*n\s*\d{1,2}\s*[dđ](?!\w)", cau_hoi_thuong)
@@ -371,6 +382,35 @@ _MAU_NGAY_CU_THE = re.compile(
     r"(?!\s*(?:ngày|ngay|đêm|dem|người|nguoi|khách|khach|triệu|trieu|tr\b|củ|cu\b|/))",
     re.IGNORECASE,
 )
+
+_MAU_NGAY_DI_SAT = re.compile(
+    r"(?<!\w)(?:ngày|ngay|khởi hành|khoi hanh|đi|di|vào|vao|tour)\s*(\d{1,2})\s*(?:/|-|\.|tháng|thang)\s*(\d{1,2})(?!\d)"
+    r"(?!\s*(?:ngày|ngay|đêm|dem|người|nguoi|khách|khach|triệu|trieu|tr\b|củ|cu\b|/|\.\d|-\d))",
+    re.IGNORECASE,
+)
+_MAU_NGAY_MAI = re.compile(r"\b(?:di|khoi hanh|xuat phat)\b.{0,12}\b(?:ngay mai|ngay mot|ngay kia|sang mai)\b|\b(?:ngay mai|ngay mot|ngay kia)\b.{0,12}\b(?:di|khoi hanh|xuat phat)\b")
+
+
+def hoi_ngay_khoi_hanh_sat(cau_hoi: str, hom_nay: date | None = None) -> bool:
+    """Khách nêu ngày đi cụ thể mà còn dưới SO_NGAY_BAO_TRUOC_GOI_Y ngày nữa là tới ("đi 21/11" khi hôm nay 19/11, "đi ngày mai"). Chatbot
+    đã ẩn tour sát ngày nên không thể trả lời đúng; chủ dự án chốt (2026-11-19): báo nhân viên kiểm tra chỗ, không gợi ý tour khác.
+    Chỉ tính ngày đi (có chữ "đi", "ngày", "khởi hành"...), không tính "dịp 20/11" hay "tour 4-5 ngày"."""
+    hom_nay = hom_nay or date.today()
+    moc = hom_nay + timedelta(days=SO_NGAY_BAO_TRUOC_GOI_Y)
+    c = unicodedata.normalize("NFC", cau_hoi).lower()
+    if _MAU_NGAY_MAI.search(bo_dau(c)):
+        return True
+    for mm in _MAU_NGAY_DI_SAT.finditer(c):
+        ngay_, thang_ = int(mm.group(1)), int(mm.group(2))
+        for nam in (hom_nay.year, hom_nay.year + 1):
+            try:
+                d = date(nam, thang_, ngay_)
+            except ValueError:
+                continue
+            if hom_nay <= d < moc:
+                return True
+    return False
+
 
 # Ngày dương của lễ tính theo lịch âm. Hết năm thì thêm năm mới vào đây; năm chưa có thì chỉ còn khớp theo tên tour.
 _MUNG_1_TET_AM = {2027: date(2027, 2, 6), 2028: date(2028, 1, 26)}
@@ -629,6 +669,14 @@ def bo_dau(text: str) -> str:
     return text.replace("đ", "d").replace("Đ", "D")
 
 
+_CHU_NHAT = re.compile(r"ch[uủ]\s+nh[aậ]t", re.IGNORECASE)
+
+
+def _bo_chu_nhat(text: str) -> str:
+    """"chủ nhật" là thứ trong tuần, không phải Nhật Bản (bug thật: "thứ 6 – chủ nhật" ra "chưa có tour Nhật 3 ngày")."""
+    return _CHU_NHAT.sub("cn", text)
+
+
 def trich_nhieu_diem_den(cau_hoi: str) -> list[str]:
     """Nhận diện TẤT CẢ điểm đến khách nhắc trong 1 câu (không chỉ 1 cái như
     trich_diem_den) — dùng cho câu SO SÁNH kiểu "Đà Lạt hay Phú Quốc rẻ hơn",
@@ -638,7 +686,7 @@ def trich_nhieu_diem_den(cau_hoi: str) -> list[str]:
     TOÀN BỘ điểm đến (kể cả alias) và gom mọi cái khớp, giữ thứ tự xuất hiện
     trong câu hỏi (không phải thứ tự trong dữ liệu) để trả lời tự nhiên đúng
     thứ tự khách nêu."""
-    cau_hoi_thuong = cau_hoi.lower()
+    cau_hoi_thuong = _bo_chu_nhat(cau_hoi.lower())
     cau_hoi_khong_dau = bo_dau(cau_hoi_thuong)
     toan_bo = tat_ca_luot_con_han()
     cac_diem_den = sorted(
@@ -711,6 +759,8 @@ def alias_khop(alias: str, cau_hoi_thuong: str) -> int:
     """Vị trí alias trong câu hỏi, -1 nếu không có. Khớp theo RANH GIỚI TỪ (không dính chữ cái hai bên)
     để alias ngắn như "nga" không bắt nhầm trong "ngày", "ngân sách", "nghĩ"... — bug thật gặp phải:
     khách hỏi "Tour nga có không" không ra tour Nga vì diem_den trong dữ liệu là "Liên bang Nga"."""
+    for cum in ALIAS_LOAI_TRU.get(alias, ()):  # "mỹ" trong "Mỹ Tho", "thẩm mỹ" không phải nước Mỹ; thay bằng khoảng trắng để giữ vị trí
+        cau_hoi_thuong = re.sub(r"(?<!\w)" + re.escape(cum) + r"(?!\w)", lambda k: " " * len(k.group()), cau_hoi_thuong)
     m = re.search(r"(?<!\w)" + re.escape(alias) + r"(?!\w)", cau_hoi_thuong)
     return m.start() if m else -1
 
@@ -725,7 +775,7 @@ def trich_diem_den(cau_hoi: str) -> str | None:
     (không phân biệt hoa/thường), coi là khách đã nhắc rõ điểm đến đó.
     Ưu tiên giá trị DÀI HƠN trước (VD "Trung Quốc" phải thắng "Trung" nếu có
     2 giá trị lồng nhau) để tránh khớp nhầm phần chung chung."""
-    cau_hoi_thuong = cau_hoi.lower()
+    cau_hoi_thuong = _bo_chu_nhat(cau_hoi.lower())
     toan_bo = tat_ca_luot_con_han()
     cac_diem_den = sorted(
         {m["diem_den"] for m in toan_bo if m["diem_den"]},
@@ -898,6 +948,119 @@ def hoi_muon_gap_nhan_vien(cau_hoi: str) -> bool:
     return not _co_cum_tu(cau_hoi_thuong, TU_KHOA_DANG_HOI)
 
 
+def tim_sdt_viet_nam(cau_hoi: str) -> str | None:
+    """Số điện thoại di động Việt Nam khách gõ trong tin (có thể cách bằng dấu cách, chấm, gạch; +84 hoặc 84 đầu), chuẩn hoá về 10 số.
+    Số dài/ngắn hơn 10 số (gõ nhầm) hoặc đầu số lạ thì không tính. Xuống dòng ngăn cách 2 số khác nhau."""
+    for m in re.finditer(r"(?<!\d)(?:\+?84|0)[\d \t.\-]{8,13}\d(?!\d)", cau_hoi):
+        so = re.sub(r"\D", "", m.group(0))
+        if so.startswith("84") and len(so) == 11:
+            so = "0" + so[2:]
+        if len(so) == 10 and so[:2] in ("03", "05", "07", "08", "09"):
+            return so
+    return None
+
+
+_MAU_SDT_QUOC_TE = re.compile(r"(?<![\w+])\+(?!84)\d{1,3}[\d \t.\-]{6,14}\d(?!\d)")
+
+
+def tim_sdt_quoc_te(cau_hoi: str) -> str | None:
+    """Số nước ngoài có mã quốc gia "+" đầu (khách Việt kiều, bug thật: "+61 403 353 800" không được nhận). Trả số đã bỏ dấu cách,
+    giữ dấu "+". Không có "+" thì không tính, để không nhầm với giá tiền hay mã tour."""
+    for m in _MAU_SDT_QUOC_TE.finditer(cau_hoi):
+        so = "+" + re.sub(r"\D", "", m.group(0))
+        if 9 <= len(so) - 1 <= 15:
+            return so
+    return None
+
+
+# Chữ hay đi kèm khi khách chỉ gửi số ("Em gửi", "sđt zalo đây ạ", "Ok em", "nhắn zalo giúp em"): còn lại toàn những chữ này thì
+# tin chỉ là để lại số. Có câu hỏi thật thì AI vẫn trả lời (bug thật: "Má chị 85t vẫn đi được hả" kèm số bị trả "đã ghi nhận số").
+_CHU_DI_KEM_SDT = {
+    "da", "vang", "ok", "oke", "okay", "em", "anh", "chi", "minh", "toi", "c", "a", "e", "ah", "nhe", "nha", "nhen",
+    "gui", "lai", "so", "sdt", "dt", "dien", "thoai", "zalo", "lien", "he", "lh", "day", "nay", "o", "ben", "cua", "la", "cho",
+    "nhan", "nt", "goi", "giup", "dum", "gium", "voi", "cam", "on", "thanks", "tks", "nho", "qua", "duoc", "ko", "khong",
+}
+
+
+def co_cau_hoi_ngoai_sdt(cau_hoi: str) -> bool:
+    """Tin có số điện thoại mà còn hỏi chuyện khác (có dấu "?" hoặc từ 4 chữ có nghĩa trở lên sau khi bỏ số và chữ đi kèm)."""
+    bo_so = _MAU_SDT_QUOC_TE.sub(" ", cau_hoi)
+    bo_so = re.sub(r"(?<!\d)(?:\+?84|0)[\d \t.\-]{8,13}\d(?!\d)", " ", bo_so)
+    if "?" in bo_so:
+        return True
+    chu = re.findall(r"\w+", bo_dau(unicodedata.normalize("NFC", bo_so).lower()))
+    return len([c for c in chu if c not in _CHU_DI_KEM_SDT]) >= 4
+
+
+_MAU_NHAN_VIEN_HOI = re.compile(
+    r"\b(bao lau|bao nhieu|khi nao|bao gio|nao|o dau|the nao|ra sao|cho em hoi|cho minh hoi|phai khong|hay sao)\b"
+    r"|\b(khong|ko|chua|ha)( a| ah| vay| nhi)?$"
+)
+_MAU_NGAY_THANG = re.compile(r"(?<![\d/.\-])\d{1,2}\s*[/\-.]\s*\d{1,2}(?:\s*[/\-.]\s*\d{2,4})?(?![\d/.\-])")
+
+
+def la_cau_hoi_cua_nhan_vien(text: str) -> bool:
+    """Tin nhân viên là câu hỏi khách ("rớt visa bao lâu rồi ạ", "mình đi thời gian nào ạ"): câu khách nhắn ngay sau đó là câu trả lời,
+    không được đem đi dò "chưa có tour tháng Y" (bug thật: khách đáp "Đầu tháng 4 e", bot trả "chưa có tour Hồng Kông tháng 4")."""
+    t = bo_dau(unicodedata.normalize("NFC", text or "").lower()).strip(" .!")
+    return "?" in t or bool(_MAU_NHAN_VIEN_HOI.search(t))
+
+
+def nhieu_noi_hoac_nhieu_ngay(cau_hoi: str) -> bool:
+    """Câu nêu từ 2 nơi hoặc 2 ngày trở lên: câu viết sẵn chỉ hiểu một nơi một ngày nên dễ ghép sai (bug thật: "12-2 đi Thái, 18-2 đi
+    Hạ Long" thành "chưa có tour Hà Nội ngày 12/02")."""
+    return len(trich_nhieu_diem_den(cau_hoi)) >= 2 or len(_MAU_NGAY_THANG.findall(cau_hoi)) >= 2
+
+
+_MAU_DOANH_NGHIEP = re.compile(
+    r"\b(company trip|team ?building|gala ?dinner|incentive|hoi nghi|hoi thao|doan cong ty|du lich cong ty|tour cong ty|"
+    r"di cong ty|to chuc cho cong ty|cong ty (?:em|minh|toi|anh|chi|tui))\b"
+)
+_MAU_SO_NGUOI = re.compile(r"\b(\d{2,3})\s*(?:nguoi|ng|khach|pax|thanh vien)\b")  # "30 ng" = 30 người (chat viết tắt)
+_MAU_VE_RIENG = re.compile(r"\b(?:ve may bay|ve mb|khach san|ks|mb)\b")
+_MAU_HANH_DONG_DAT = re.compile(r"\b(?:dat|mua|ban|book|dang ky|tu van|ho tro)\b")
+_MAU_CO_TOUR = re.compile(r"\b(?:tour|chuong trinh|tron goi|bao gom|da gom|gom)\b")
+_MAU_KHONG_DI_TOUR = re.compile(r"\b(?:khong|ko|k|chang)\s+(?:di|mua|dat|di theo)\s+tour\b")  # "đặt khách sạn, ko đi tour" = chỉ muốn lẻ
+# Mục API tour không có dữ liệu (đánh giá 160 câu 2026-11-23), chủ dự án chốt 2026-11-25: không để AI nói "chưa có thông tin" mà báo
+# nhân viên tư vấn, khách vẫn hỏi bot chuyện khác được. Khớp trên chữ không dấu, chữ thường.
+_MAU_CAN_TU_VAN = re.compile(
+    r"\ban chay\b|\bdi ung\b|\ban kieng\b|\bkieng (?:an|hai san|thit|do)\b|\bhalal\b"  # ăn chay, dị ứng
+    r"|\bdoan(?: \w+){0,2} (?:bao nhieu|may) (?:nguoi|khach)\b|\b(?:bao nhieu|may) (?:nguoi|khach) (?:1|mot|trong|moi) doan\b"  # số người trong đoàn
+    r"|\btra gop\b|\bquet the\b|\bca the\b|\bthe tin dung\b|\bcredit card\b|\bmastercard\b"  # trả góp, quẹt thẻ
+    r"|(?<!ruou )(?<!hoa )\be?sim\b(?! phu quoc)|\bwi ?fi\b|\bcuc phat\b|\broaming\b|\bchuyen vung\b"  # SIM, wifi
+    r"|\bchuyen nhuong\b|\bnhuong (?:lai )?(?:suat|cho|ve|slot)\b|\bdoi ten\b|\bsang ten\b|\bchuyen (?:suat|cho|ve) (?:cho|sang)\b"  # chuyển suất
+    r"|\bmang thai\b|\bdang bau\b|\bco bau\b|\bba bau\b|\bbau \d+ (?:thang|tuan)\b|\bthai \d+ (?:thang|tuan)\b"  # bà bầu
+    r"|\b(?:om|benh|sot|nam vien|cap cuu|tai nan)\b.*\b(?:doi ngay|doi lich|doi dot|lui ngay|doi sang)\b"  # đổi ngày vì ốm
+    r"|\b(?:doi ngay|doi lich|doi dot|lui ngay|doi sang)\b.*\b(?:om|benh|sot|nam vien|cap cuu|tai nan)\b"
+    r"|\bkhan cap\b|\bso cap cuu\b|\b(?:ban dem|nua dem|dem khuya)\b.*\b(?:lien he|goi|hotline|so)\b"  # khẩn cấp ban đêm
+    r"|\bearly ?bird\b|\bgiam gia (?:nhom|doan|khach cu|khach than thiet)\b|\bthe thanh vien\b|\bma giam gia\b|\bgift ?voucher\b"  # ưu đãi
+    r"|\buu dai (?:khach cu|khach than thiet|dat som)\b|\bdat som (?:co )?(?:duoc )?(?:giam|uu dai)\b"
+)
+
+
+def can_nhan_vien_som(cau_hoi: str, co_sdt: bool) -> str | None:
+    """Tin KHÔNG đòi gặp nhân viên nhưng bot không phục vụ được, cần nhân viên thật nhận ngay (không để AI trả lời lạc đề):
+    - "SDT": khách để lại số điện thoại mà hồ sơ chưa có số (Zalo, Facebook; web và app luôn có số nên không bao giờ rơi vào đây).
+    - "DOANH_NGHIEP": đoàn công ty, team building, hội nghị, đoàn đông người (từ 20 người; có chữ "đoàn" thì từ 15 người).
+    - "VE_RIENG": chỉ muốn mua/đặt vé máy bay hoặc khách sạn lẻ (câu có nhắc tour/chương trình/trọn gói thì là hỏi tour, không tính).
+    - "TU_VAN": hỏi mục chưa có dữ liệu (ăn chay, dị ứng, số người trong đoàn, trả góp, quẹt thẻ, SIM, wifi, chuyển suất, bà bầu,
+      đổi ngày vì ốm, số khẩn cấp ban đêm, giảm giá nhóm, Early Bird, thẻ thành viên, mã giảm giá).
+    Trả mã lý do, hoặc None."""
+    cau_khong_dau = bo_dau(unicodedata.normalize("NFC", cau_hoi).lower())
+    if not co_sdt and (tim_sdt_viet_nam(cau_hoi) or tim_sdt_quoc_te(cau_hoi)):
+        return "SDT"
+    if _MAU_DOANH_NGHIEP.search(cau_khong_dau):
+        return "DOANH_NGHIEP"
+    doan = re.search(r"\bdoan\b", cau_khong_dau) is not None
+    if any(int(n) >= (15 if doan else 20) for n in _MAU_SO_NGUOI.findall(cau_khong_dau)):
+        return "DOANH_NGHIEP"
+    if _MAU_VE_RIENG.search(cau_khong_dau) and _MAU_HANH_DONG_DAT.search(cau_khong_dau) and not _MAU_CO_TOUR.search(_MAU_KHONG_DI_TOUR.sub(" ", cau_khong_dau)):
+        return "VE_RIENG"
+    if _MAU_CAN_TU_VAN.search(cau_khong_dau):
+        return "TU_VAN"
+    return None
+
+
 # Từ viết hoa hay đứng sau "tour"/"đi" nhưng KHÔNG phải địa danh (bỏ dấu, chữ thường) — xem
 # hoi_diem_den_khong_co_tour(): gặp các từ này thì không kết luận gì, để các nhánh tìm phía sau xử lý như cũ.
 _TU_VIET_HOA_KHONG_PHAI_DIA_DANH = {
@@ -953,6 +1116,9 @@ def dia_danh_khong_co_tour(cau_hoi: str) -> str | None:
     Trả về TÊN nơi đó (viết hoa chữ đầu) để trả lời thẳng "chưa có tour đi …"; None nếu không phải trường hợp này."""
     cau_hoi = unicodedata.normalize("NFC", cau_hoi)
     cau_hoi_thuong = cau_hoi.lower()
+    # Kể chuyện đã đi ("mới đi TQ về nè", "vừa qua Nhật rồi") không phải hỏi tour đi nơi đó (bug thật: trả "chưa có tour đi TQ").
+    if re.search(r"(mới|vừa|đã|năm ngoái|năm rồi)\s+(đi|du lịch|qua|sang).{0,30}(về|rồi)", cau_hoi_thuong):
+        return None
     # Tên + điểm đến của từng tour, bỏ dấu, tách sẵn thành từ
     van_ban = {bo_dau(f"{m['ten']} {m['diem_den']}".lower()) for m in tat_ca_luot_con_han()}
     van_ban = [" ".join(re.findall(r"\w+", v)) for v in van_ban]

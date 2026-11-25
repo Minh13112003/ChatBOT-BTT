@@ -17,10 +17,12 @@ def luot(id_: str, ten: str, n: int, diem_den: str = "Bali") -> dict:
 
 
 HOM_QUA = luot("a0", "Du Lịch Bali", -1)
-HOM_NAY = luot("a1", "Du Lịch Bali", 0)
+HOM_NAY = luot("h0", "Du Lịch Bali", 0)  # khởi hành sát ngày (dưới 3 ngày) cũng không gợi ý nữa (chốt 19/11/2026)
+HAI_NGAY = luot("h2", "Du Lịch Bali", 2)
+BA_NGAY = luot("a1", "Du Lịch Bali", 3)
 TUAN_SAU = luot("a2", "Du Lịch Bali", 7)
 HET_HAN_HAN = luot("b0", "Du Lịch Bali Cũ", -9)
-DU_LIEU = [HOM_QUA, HOM_NAY, TUAN_SAU, HET_HAN_HAN]
+DU_LIEU = [HOM_QUA, HOM_NAY, HAI_NGAY, BA_NGAY, TUAN_SAU, HET_HAN_HAN]
 
 
 class Nen(unittest.TestCase):
@@ -34,7 +36,7 @@ class Nen(unittest.TestCase):
 
 
 class AnLuotDaQua(Nen):
-    def test_bo_luot_da_qua_giu_luot_hom_nay(self):
+    def test_bo_luot_da_qua_va_luot_duoi_3_ngay(self):
         self.assertEqual([m["id"] for m in rag.tat_ca_luot_con_han()], ["a1", "a2"])
 
     def test_tu_an_khi_sang_ngay_moi_khong_can_dong_bo(self):
@@ -60,7 +62,7 @@ class TrenDuLieuThat(unittest.TestCase):
         for cau in ["tour Đà Lạt", "có tour nào hay không", "tour nước ngoài", "tour tháng 12", "tour dưới 10 triệu",
                     "tour rẻ nhất", "tour độc lạ", "tour Bali khởi hành ngày nào", "Đà Lạt hay Phú Quốc rẻ hơn", "tour biển"]:
             with self.subTest(cau=cau):
-                self.assertFalse([t["ngay_khoi_hanh"] for t in rag.tim_tour_lien_quan(cau) if t["ngay_khoi_hanh"] < hom_nay])
+                self.assertFalse([t["ngay_khoi_hanh"] for t in rag.tim_tour_lien_quan(cau) if t["ngay_khoi_hanh"] < rag.ngay_som_nhat_goi_y()])
 
 
 if __name__ == "__main__":

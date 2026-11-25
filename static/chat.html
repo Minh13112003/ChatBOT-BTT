@@ -3,19 +3,62 @@
 <head>
 <meta charset="utf-8">
 <title>bttAI — BenThanh Tourist</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  // Đang được nhúng vào website khác qua static/widget.js (?nhung=1): nền trong suốt, khung chat lấp đầy iframe (widget.js lo bo góc, đổ bóng).
+  window.BTT_NHUNG = new URLSearchParams(location.search).has("nhung") && window.parent !== window;
+  if (window.BTT_NHUNG) document.documentElement.classList.add("nhung");
+</script>
 <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 640px; margin: 32px auto; background: #fff; color: #222; }
-  .khung-chat { border: 1px solid #eee; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,.08); }
-  .thanh-tieu-de { background: #E5252A; color: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
+  html, body { margin: 0; }
+  body { font-family: -apple-system, "Segoe UI", sans-serif; background: #f5f5f5; color: #222; min-height: 100vh; }
 
-  .khung-tin-nhan { height: 440px; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #fafafa; }
-  .dong { display: flex; }
+  /* Nút tròn ở góc màn hình (đóng khung chat) */
+  .nut-bong-bong { position: fixed; right: 20px; bottom: 20px; z-index: 1000; width: 60px; height: 60px; border: none; border-radius: 50%;
+    background: #E5252A; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;
+    box-shadow: 0 6px 20px rgba(229,37,42,.35), 0 2px 6px rgba(0,0,0,.15); transition: transform .15s; }
+  .nut-bong-bong:hover { transform: scale(1.06); }
+  .nut-bong-bong:focus-visible { outline: 3px solid #FFB3B5; outline-offset: 3px; }
+  .so-chua-doc { position: absolute; top: -2px; right: -2px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #fff;
+    color: #E5252A; border: 2px solid #E5252A; font-size: .75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .loi-chao-nho { position: fixed; right: 92px; bottom: 30px; z-index: 1000; max-width: 230px; padding: 10px 14px; border-radius: 16px 16px 4px 16px;
+    background: #fff; color: #333; font-size: .85rem; line-height: 1.4; box-shadow: 0 4px 16px rgba(0,0,0,.12); cursor: pointer; }
+
+  /* Khung chat kiểu Messenger, nổi ở góc phải */
+  .khung-chat { position: fixed; right: 20px; bottom: 20px; z-index: 1001; width: 400px; height: min(640px, calc(100vh - 40px));
+    display: flex; flex-direction: column; background: #fff; border-radius: 16px; overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08); animation: hien-khung .18s ease-out; }
+  @keyframes hien-khung { from { opacity: 0; transform: translateY(16px) scale(.98); } to { opacity: 1; transform: none; } }
+  @media (max-width: 480px) {
+    .khung-chat { right: 0; bottom: 0; width: 100vw; height: 100dvh; border-radius: 0; }
+    .nut-bong-bong { right: 16px; bottom: 16px; }
+    .loi-chao-nho { right: 86px; bottom: 26px; max-width: calc(100vw - 110px); }
+  }
+  html.nhung, html.nhung body { background: transparent; min-height: 0; overflow: hidden; }
+  html.nhung .khung-chat { inset: 0; width: 100%; height: 100%; border-radius: 0; box-shadow: none; animation: none; }
+  html.nhung .loi-chao-nho { right: 92px; bottom: 30px; }
+  .thanh-tieu-de { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 12px; border-bottom: 1px solid #eee; background: #fff; }
+  .anh-dai-dien { flex: none; width: 40px; height: 40px; border-radius: 50%; background: #E5252A; color: #fff; display: flex; align-items: center;
+    justify-content: center; font-weight: 800; font-size: .8rem; letter-spacing: .02em; position: relative; }
+  .anh-dai-dien.nho { width: 28px; height: 28px; font-size: .55rem; }
+  .anh-dai-dien .cham-xanh { position: absolute; right: 0; bottom: 0; width: 11px; height: 11px; border-radius: 50%; background: #31A24C; border: 2px solid #fff; }
+  .ten-tieu-de { flex: 1; min-width: 0; }
+  .ten-tieu-de b { display: block; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ten-tieu-de span { display: block; font-size: .75rem; color: #65676B; }
+  .nut-tieu-de { flex: none; width: 44px; height: 44px; border: none; border-radius: 50%; background: transparent; color: #E5252A; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; }
+  .nut-tieu-de:hover { background: #F2F2F2; }
+
+  .khung-tin-nhan { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
+  .dong { display: flex; align-items: flex-end; gap: 8px; }
   .dong.khach { justify-content: flex-end; }
-  .bong-bong { max-width: 78%; padding: 10px 14px; border-radius: 14px; font-size: .9rem; line-height: 1.5; white-space: pre-wrap; }
-  .dong.khach .bong-bong { background: #E5252A; color: #fff; border-bottom-right-radius: 4px; }
-  .dong.bot .bong-bong { background: #fff; border: 1px solid #eee; border-bottom-left-radius: 4px; }
+  .dong.cach-nhom { margin-top: 8px; }
+  .cho-anh { flex: none; width: 28px; }
+  .bong-bong { max-width: 78%; padding: 8px 12px; border-radius: 18px; font-size: .9rem; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+  .dong.khach .bong-bong { background: #E5252A; color: #fff; }
+  .dong.bot .bong-bong { background: #F0F0F0; color: #050505; }
   .con-tro-go { display: inline-block; width: 2px; height: 1em; background: #999; vertical-align: text-bottom; margin-left: 1px; animation: nhay-con-tro .8s infinite; }
   @keyframes nhay-con-tro { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
   .dang-suy-nghi { display: flex; align-items: center; gap: 8px; color: #888; font-style: italic; }
@@ -46,27 +89,29 @@
   .the-handoff .nhan-zalo { display: flex; align-items: center; gap: 6px; font-weight: 700; color: #0b5f2f; }
   .the-handoff .tom-tat { display: block; margin-top: 6px; font-size: .8rem; color: #3d6b47; line-height: 1.5; }
 
-  .goi-y { border-top: 1px solid #eee; }
-  .goi-y-tieu-de { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; font-size: .8rem; color: #666; font-weight: 600; user-select: none; }
+  .goi-y { flex: none; border-top: 1px solid #eee; }
+  .goi-y-tieu-de { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; cursor: pointer; font-size: .8rem; color: #666; font-weight: 600; user-select: none; }
   .goi-y-tieu-de .mui-ten { transition: transform .15s; }
   .goi-y-tieu-de .mui-ten.dong { transform: rotate(-90deg); }
-  .goi-y-danh-sach { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
+  .goi-y-danh-sach { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; }
   .chip-goi-y { border: 1px solid #ddd; border-radius: 100px; padding: 7px 14px; font-size: .82rem; background: #fff; color: #333; cursor: pointer; }
   .chip-goi-y:hover { background: #FFF4F4; border-color: #E5252A; color: #C81E23; }
   .chip-goi-y:disabled { opacity: .5; cursor: not-allowed; }
 
-  .khung-nhap { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; align-items: flex-end; }
-  .khung-nhap textarea { flex: 1; padding: 10px 14px; border-radius: 18px; border: 1px solid #ddd; font-family: inherit; font-size: 1rem; resize: none; max-height: 120px; line-height: 1.4; }
+  .khung-nhap { flex: none; display: flex; gap: 4px; padding: 8px 8px 10px; align-items: flex-end; }
+  .khung-nhap textarea { flex: 1; min-width: 0; padding: 9px 14px; border-radius: 20px; border: none; background: #F0F2F5; font-family: inherit; font-size: 1rem;
+    resize: none; max-height: 120px; line-height: 1.4; outline: none; }
+  .khung-nhap textarea:focus { box-shadow: 0 0 0 2px #FFD0D1; }
   .tep-dinh-kem { display: block; margin: 0 0 6px; }
   .tep-dinh-kem img { display: block; max-width: 100%; max-height: 260px; border-radius: 10px; background: #fff; }
   .tep-pdf { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 10px; border-radius: 10px; background: #fff; color: #222; text-decoration: none; font-size: .85rem; font-weight: 600; word-break: break-all; }
-  .nut-dinh-kem { width: 44px; height: 44px; padding: 0 !important; display: flex; align-items: center; justify-content: center; background: #fff !important; color: #E5252A !important; border: 1px solid #ddd !important; }
-  .nut-dinh-kem:disabled { color: #bbb !important; }
-  .luu-y-tep { padding: 0 16px 8px; font-size: .75rem; color: #777; }
-  .khung-nhap button { border: none; border-radius: 100px; padding: 10px 18px; background: #E5252A; color: #fff; font-weight: 700; cursor: pointer; flex: none; }
-  .khung-nhap button:disabled { background: #ccc; }
+  .luu-y-tep { flex: none; padding: 0 14px 2px; font-size: .7rem; color: #8a8d91; line-height: 1.35; }
+  .khung-nhap button { flex: none; width: 44px; height: 44px; border: none; border-radius: 50%; padding: 0; background: transparent; color: #E5252A;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .khung-nhap button:hover:not(:disabled) { background: #F2F2F2; }
+  .khung-nhap button:disabled { color: #c4c4c4; cursor: not-allowed; }
 
-  .form-khach { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; }
+  .form-khach { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; }
   .form-khach label { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; font-weight: 600; color: #444; }
   .form-khach input { min-height: 44px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 10px; font: inherit; font-weight: 400; }
   .form-khach button { min-height: 44px; border: none; border-radius: 10px; background: #E5252A; color: #fff; font-weight: 700; cursor: pointer; }
@@ -78,13 +123,32 @@
 </head>
 <body>
 <div id="app">
-  <div class="khung-chat">
+  <template v-if="!moChat">
+    <div v-if="hienLoiChao" class="loi-chao-nho" @click="moKhungChat">Xin chào! Bạn cần tư vấn tour? Nhắn bttAI ngay nhé.</div>
+    <button class="nut-bong-bong" type="button" aria-label="Mở khung chat với bttAI" @click="moKhungChat">
+      <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3C6.48 3 2 6.92 2 11.75c0 2.3 1.02 4.39 2.69 5.95-.2 1.36-.86 2.6-1.83 3.55a.5.5 0 0 0 .38.85c1.9-.06 3.64-.73 4.98-1.82 1.17.37 2.44.57 3.78.57 5.52 0 10-3.92 10-8.75S17.52 3 12 3Zm-4.5 10.25a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm4.5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm4.5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z"/></svg>
+      <span v-if="soChuaDoc" class="so-chua-doc">{{ soChuaDoc > 9 ? '9+' : soChuaDoc }}</span>
+    </button>
+  </template>
+
+  <div v-else class="khung-chat" role="dialog" aria-label="Trò chuyện với bttAI" @keydown.esc="dongKhungChat">
     <div class="thanh-tieu-de">
-      <div>bttAI — BenThanh Tourist</div>
+      <div class="anh-dai-dien" aria-hidden="true">btt<span class="cham-xanh"></span></div>
+      <div class="ten-tieu-de">
+        <b>bttAI · BenThanh Tourist</b>
+        <span>Trợ lý tour, thường trả lời ngay</span>
+      </div>
+      <button class="nut-tieu-de" type="button" aria-label="Thu nhỏ khung chat" @click="dongKhungChat">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>
+      </button>
     </div>
 
     <div class="khung-tin-nhan" ref="khungTinNhan">
-      <div v-for="(tin, i) in danhSachTinNhan" :key="i" class="dong" :class="tin.vaiTro === 'user' ? 'khach' : 'bot'">
+      <div v-for="(tin, i) in danhSachTinNhan" :key="i" class="dong" :class="[tin.vaiTro === 'user' ? 'khach' : 'bot', { 'cach-nhom': i > 0 && danhSachTinNhan[i - 1].vaiTro !== tin.vaiTro }]">
+        <template v-if="tin.vaiTro !== 'user'">
+          <div v-if="laTinCuoiNhom(i)" class="anh-dai-dien nho" aria-hidden="true">btt</div>
+          <div v-else class="cho-anh"></div>
+        </template>
         <div class="bong-bong"><span v-if="tin.nhanVien" class="nhan-nhan-vien">Nhân viên BenThanh Tourist</span>
           <a v-if="tin.tep" class="tep-dinh-kem" :href="tin.tep.url" target="_blank" rel="noopener">
             <img v-if="tin.tep.type.startsWith('image/')" :src="tin.tep.url" :alt="tin.tep.name" loading="lazy" @load="cuonXuongDuoi">
@@ -120,7 +184,8 @@
           </template>
         </div>
       </div>
-      <div v-if="dangChoPhanHoiTuServer" class="dong bot">
+      <div v-if="dangChoPhanHoiTuServer" class="dong bot cach-nhom">
+        <div class="anh-dai-dien nho" aria-hidden="true">btt</div>
         <div class="bong-bong dang-suy-nghi">
           bttAI đang suy nghĩ, bạn chờ chút nha
           <span class="cham-suy-nghi"><span></span><span></span><span></span></span>
@@ -155,29 +220,32 @@
       </div>
     </div>
 
-    <div class="luu-y-tep">Bạn có thể gửi ảnh (JPG, PNG, WebP) hoặc PDF cho nhân viên. Vui lòng không gửi ảnh CCCD, hộ chiếu nếu chưa cần thiết.</div>
     <form class="khung-nhap" @submit.prevent="guiCauHoi()">
       <input ref="oChonTep" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden @change="chonTep">
-      <button type="button" class="nut-dinh-kem" :disabled="dangChoPhanHoi" aria-label="Đính kèm ảnh hoặc PDF" @click="oChonTep.click()">
-        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 12-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>
+      <button type="button" :disabled="dangChoPhanHoi" aria-label="Gửi ảnh hoặc PDF" title="Gửi ảnh (JPG, PNG, WebP) hoặc PDF" @click="oChonTep.click()">
+        <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="m21 15-5-5L5 21"/></svg>
       </button>
       <textarea
         ref="oNhap"
         v-model="cauHoiDangNhap"
         :disabled="dangChoPhanHoi"
-        placeholder="Nhập câu hỏi của bạn..."
+        placeholder="Aa"
+        aria-label="Nhập tin nhắn"
         rows="1"
         @input="tuGianONhap"
         @keydown.enter.exact.prevent="guiCauHoi()"
       ></textarea>
-      <button :disabled="dangChoPhanHoi">{{ dangChoPhanHoi ? '...' : 'Gửi' }}</button>
+      <button type="submit" :disabled="dangChoPhanHoi || !cauHoiDangNhap.trim()" aria-label="Gửi tin nhắn">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4 21 12 3.4 3.6a.6.6 0 0 0-.84.7L4.7 11 13 12l-8.3 1-2.14 6.7a.6.6 0 0 0 .84.7Z"/></svg>
+      </button>
     </form>
+    <div class="luu-y-tep">Không gửi ảnh CCCD, hộ chiếu nếu chưa cần thiết.</div>
     </template>
   </div>
 </div>
 
 <script>
-const { createApp, ref, nextTick } = Vue;
+const { createApp, ref, nextTick, watch } = Vue;
 
 createApp({
   setup() {
@@ -313,7 +381,7 @@ createApp({
 
     // Gợi ý cố định — bấm vào sẽ tự gửi đúng câu này, bot tự tra cứu dữ liệu
     // tour thật (qua ChromaDB, xem rag.py) chứ không phải link tĩnh.
-    const moGoiY = ref(true);
+    const moGoiY = ref(danhSachTinNhan.value.length <= 2); // đã có trò chuyện thì thu gọn cho khung tin nhắn rộng hơn
     const cacCauGoiY = ref([
       "Có tour nào độc lạ, ít người biết không?",
       "Tour trong nước giá tốt",
@@ -353,6 +421,43 @@ createApp({
     async function cuonXuongDuoi() {
       await nextTick();
       if (khungTinNhan.value) khungTinNhan.value.scrollTop = khungTinNhan.value.scrollHeight;
+    }
+
+    // Bong bóng chat: đóng thì chỉ hiện nút tròn ở góc, mở thì hiện khung kiểu Messenger. Nhớ trạng thái mở cho lần tải lại.
+    const moChat = ref(docKho("bttai_mo_chat") === "1");
+    const soChuaDoc = ref(0);
+    const hienLoiChao = ref(false);
+    if (!moChat.value && !docKho("bttai_da_mo_chat")) setTimeout(() => { if (!moChat.value) hienLoiChao.value = true; }, 3000);
+    function moKhungChat() {
+      moChat.value = true;
+      soChuaDoc.value = 0;
+      hienLoiChao.value = false;
+      ghiKho("bttai_mo_chat", "1");
+      ghiKho("bttai_da_mo_chat", "1");
+      cuonXuongDuoi();
+      nextTick(() => { if (oNhap.value && !oNhap.value.disabled) oNhap.value.focus(); });
+    }
+    if (moChat.value) cuonXuongDuoi(); // tải lại trang khi khung đang mở: xuống tin mới nhất
+    function dongKhungChat() {
+      moChat.value = false;
+      ghiKho("bttai_mo_chat", null);
+    }
+    // Nhúng trong website khác: báo widget.js đổi kích thước iframe theo trạng thái (nút tròn / lời chào / khung mở).
+    if (window.BTT_NHUNG) {
+      const baoKichThuoc = () => window.parent.postMessage({ bttai: true, trangThai: moChat.value ? "mo" : hienLoiChao.value ? "loi_chao" : "dong" }, "*");
+      watch([moChat, hienLoiChao], baoKichThuoc, { immediate: true });
+      // widget.js nạp lại sau khi iframe tải xong thì hỏi lại trạng thái
+      window.addEventListener("message", (e) => { if (e.source === window.parent && e.data && e.data.bttaiHoi) baoKichThuoc(); });
+    }
+    // Tin mới của bot / nhân viên tới lúc khung đang đóng: hiện số trên nút tròn.
+    watch(() => danhSachTinNhan.value.length, (moi, cu) => {
+      if (moChat.value || moi <= cu) return;
+      soChuaDoc.value += danhSachTinNhan.value.slice(cu).filter((t) => t.vaiTro !== "user").length;
+    });
+    // Ảnh đại diện nhỏ chỉ hiện ở tin cuối của một nhóm tin bot liền nhau (giống Messenger).
+    function laTinCuoiNhom(i) {
+      const sau = danhSachTinNhan.value[i + 1];
+      return !sau || sau.vaiTro === "user";
     }
 
     // Giả lập hiệu ứng gõ chữ ở FRONTEND — backend vẫn trả lời đủ 1 lần
@@ -500,7 +605,7 @@ createApp({
       }
     }
 
-    return { oChonTep, chonTep, danhSachTinNhan, cauHoiDangNhap, dangChoPhanHoi, dangChoPhanHoiTuServer, khungTinNhan, oNhap, tuGianONhap, moGoiY, cacCauGoiY, guiCauHoi, ngayKhoiHanhGanNhat, nhanNgayKhoiHanh, nhanConCho, daDinhDanh, tenKhach, sdtKhach, loiDinhDanh, dangGuiThongTin, guiThongTin };
+    return { moChat, soChuaDoc, hienLoiChao, moKhungChat, dongKhungChat, laTinCuoiNhom, oChonTep, chonTep, danhSachTinNhan, cauHoiDangNhap, dangChoPhanHoi, dangChoPhanHoiTuServer, khungTinNhan, oNhap, tuGianONhap, moGoiY, cacCauGoiY, guiCauHoi, ngayKhoiHanhGanNhat, nhanNgayKhoiHanh, nhanConCho, daDinhDanh, tenKhach, sdtKhach, loiDinhDanh, dangGuiThongTin, guiThongTin };
   },
 }).mount("#app");
 </script>

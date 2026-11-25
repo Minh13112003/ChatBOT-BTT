@@ -77,14 +77,21 @@ def _cat_ve_cau_tron_ven(noi_dung: str) -> str:
     return noi_dung[: moc_cat[-1]].strip() if moc_cat else ""
 
 
-def hoi_gemini(cau_hoi: str, tours: list[dict], lich_su: list[dict]) -> str:
+def hoi_gemini(cau_hoi: str, tours: list[dict], lich_su: list[dict], tin_nhan_vien: str | None = None, ghi_chu_kenh: str | None = None,
+               chinh_sach: str | None = None) -> str:
     """Bản thay thế tạm cho hoi_luna() ở llm_luna.py — dùng Gemini (free tier)
     qua endpoint OpenAI-compatible của Google, để test không tốn credit OpenAI.
     Cùng cấu trúc prompt/messages với Luna, chỉ khác client/model.
     """
     danh_sach_tour = f"DANH SÁCH TOUR PHÙ HỢP:\n{json.dumps(tours, ensure_ascii=False, indent=2)}"
 
-    messages = [{"role": "system", "content": LUAT_CO_DINH + "\n\n" + danh_sach_tour}]
+    # Tin nhân viên thật đã nhắn khách (chỉ có khi nối trang quản trị): khách hay trả lời đúng thứ nhân viên vừa gửi.
+    khoi_nhan_vien = (f"\n\nNHÂN VIÊN BENTHANH ĐÃ NHẮN KHÁCH GẦN ĐÂY (cũ trước, mới sau):\n{tin_nhan_vien}" if tin_nhan_vien else "")
+    # Kênh Zalo/Facebook: tên khách trên kênh và việc không đặt tour được trong khung chat (main.ghi_chu_kenh).
+    khoi_kenh = f"\n\nKÊNH NHẮN TIN:\n{ghi_chu_kenh}" if ghi_chu_kenh else ""
+    # Chính sách theo tour (cọc, huỷ, thanh toán, bao gồm...) lấy từ API chi tiết tour: chinh_sach_tour.khoi_chinh_sach.
+    khoi_chinh_sach = f"\n\n{chinh_sach}" if chinh_sach else ""
+    messages = [{"role": "system", "content": LUAT_CO_DINH + khoi_kenh + "\n\n" + danh_sach_tour + khoi_chinh_sach + khoi_nhan_vien}]
     messages += lich_su
     messages.append({"role": "user", "content": cau_hoi})
 

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 
 import admin_chat
 import lich_su_db
-from config import NESTJS_BASE_URL
+from config import NESTJS_BASE_URL, NHUNG_CHO_PHEP
 from rules import (
     MAX_HISTORY_TURNS,
     RATE_LIMIT_PER_MINUTE,
@@ -29,10 +29,13 @@ from rules import (
 from rag import (
     chia_trang_dip, hoi_dip_le_chung, hoi_xem_tiep_tour,
     tim_tour_lien_quan, hoi_tim_tour_thieu_thong_tin, hoi_muon_gap_nhan_vien, hoi_cach_dat_tour, _co_cum_tu,
-    dia_danh_khong_co_tour, ten_goi_diem_den, trich_diem_den,
+    dia_danh_khong_co_tour, ten_goi_diem_den, trich_diem_den, can_nhan_vien_som,
+    co_cau_hoi_ngoai_sdt, la_cau_hoi_cua_nhan_vien, nhieu_noi_hoac_nhieu_ngay, hoi_ngay_khoi_hanh_sat,
 )
 from moderation import co_noi_dung_nhay_cam
 from llm_gemini import hoi_gemini, lay_token_cau_vua_hoi, tom_tat_hoi_thoai
+import chinh_sach_tour
+import ngoai_pham_vi
 import dat_tour
 from database import (
     khoi_tao_database,
@@ -41,6 +44,7 @@ from database import (
     luu_khach_web,
     luu_tin_nhan,
     lay_lich_su,
+    moc_lich_su_cu_nhat,
     kiem_tra_rate_limit,
     don_tin_nhan_cu_3_ngay,
     xoa_lich_su_cuoc_tro_chuyen,
@@ -273,9 +277,55 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
+@app.middleware("http")
+async def chi_cho_website_duoc_phep_nhung(request: Request, call_next):
+    """Khung chat web chỉ được nhúng (iframe, qua static/widget.js) vào website trong NHUNG_CHO_PHEP, mặc định benthanhtourist.com.
+    Website lạ nhúng thì trình duyệt không hiện, để không ai gắn chatbot của công ty lên trang của họ."""
+    res = await call_next(request)
+    if request.url.path == "/static/chat.html":
+        res.headers["Content-Security-Policy"] = f"frame-ancestors 'self' {NHUNG_CHO_PHEP}"
+    return res
+
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 khoi_tao_database()
 
+# Khách chưa để SĐT (Zalo, Facebook) mà gõ số; đoàn công ty / đoàn đông; chỉ cần vé máy bay hoặc khách sạn lẻ: bot không phục vụ được,
+# báo nhân viên ngay (cờ wantsHuman). Câu dưới đây chỉ dùng khi trang quản trị không trả lời (backend đã có câu báo riêng khi nối được).
+TRA_LOI_NHAN_VIEN_SOM = {
+    "SDT": "Mình đã ghi nhận số điện thoại của bạn và chuyển cho nhân viên. Nhân viên BenThanh sẽ liên hệ bạn sớm nhé.",
+    "DOANH_NGHIEP": "Với đoàn công ty hoặc đoàn đông người, nhân viên cần trao đổi trực tiếp để báo giá phù hợp. Mình đã chuyển yêu cầu của bạn cho nhân viên, "
+                    "bạn cũng có thể gọi bộ phận đoàn: trong nước 0971 963 676, quốc tế 0919 696 894.",
+    "VE_RIENG": "Vé máy bay lẻ bạn liên hệ hotline 0823 260 110 nhé. Mình cũng đã chuyển yêu cầu của bạn cho nhân viên để hỗ trợ thêm về vé và khách sạn.",
+    "DAT_TOUR": "Mình đã báo nhân viên BenThanh. Nhân viên sẽ nhắn bạn ngay tại đây để kiểm tra chỗ và chốt tour nhé.",
+    # Khách nêu ngày đi còn dưới 3 ngày (chốt 2026-11-19): chatbot không gợi ý tour sát ngày, nhân viên kiểm tra chỗ thật.
+    "NGAY_SAT": "Tour khởi hành sát ngày cần nhân viên kiểm tra chỗ còn hay không. Mình đã báo nhân viên BenThanh, nhân viên sẽ nhắn bạn sớm nhé.",
+    # Mục chưa có dữ liệu (chủ dự án chốt 2026-11-25). Câu này cũng gửi cho trang quản trị (contactReply) để thay câu báo mặc định.
+    "TU_VAN": "Trường hợp này mình sẽ liên hệ nhân viên tư vấn cho bạn nha. Trong lúc chờ nhân viên, bạn cứ hỏi mình vấn đề khác bạn đang thắc mắc nhé.",
+}
+# Lý do gửi câu riêng cho trang quản trị thay câu "Mình đã báo nhân viên..." mặc định.
+CAU_BAO_RIENG = ("TU_VAN",)
+# Zalo, Facebook (chốt 19/11/2026): bot vẫn tư vấn, gọi khách theo tên trên kênh đó, nhưng KHÔNG chạy luồng đặt tour (luồng đặt cần tài khoản
+# app); khách muốn đặt / chốt thì báo nhân viên để sale chủ động nhắn. Bug thật: luồng đặt nuốt số điện thoại, chọn sai ngày.
+KENH_MANG_XA_HOI = ("ZALO", "FACEBOOK")
+
+
+def ghi_chu_kenh(kenh: str, khach: dict | None) -> str | None:
+    if kenh not in KENH_MANG_XA_HOI:
+        return None
+    ten_kenh = "Zalo" if kenh == "ZALO" else "Facebook"
+    dong = [
+        f"Khách đang nhắn qua {ten_kenh}. Khách KHÔNG đặt tour được trong khung chat này: đừng hướng dẫn đặt trên app hay bấm nút đặt tour. "
+        "Khi khách nói muốn đặt, hệ thống tự báo nhân viên; còn lại bạn ĐỪNG hứa nhân viên sẽ nhắn, gọi hay liên hệ, vì chưa ai được báo."
+    ]
+    ten = ((khach or {}).get("name") or "").strip()
+    if ten:
+        dong.append(f"Tên {ten_kenh} của khách: {ten[:60]}. Gọi khách bằng tên này cho thân thiện; chưa rõ là anh hay chị thì đừng tự đoán.")
+    return chr(10).join(dong)
+
+
+def _muon_dat_tour(cau: str) -> bool:
+    return dat_tour.hoi_dat_tour(cau) or dat_tour.chi_noi_muon_dat(cau) or dat_tour.muon_dang_ky(cau) or hoi_cach_dat_tour(cau)
 DO_DAI_TIN_NHAN_TOI_DA = 1000  # ký tự; dài hơn thì không gửi cho AI (tốn token, thường là dán nhầm/spam)
 TRA_LOI_KHI_AI_LOI = "Trợ lý đang bận nên mình chưa trả lời chi tiết được, bạn thử lại sau ít phút nhé."
 TRA_LOI_KHI_AI_LOI_CO_TOUR = "Mình tìm được vài tour phù hợp, bạn xem chi tiết ở các thẻ bên dưới nhé."
@@ -600,6 +650,29 @@ def web_updates(device_id: str, request: Request, after: str | None = None):
     return _lay_tin_nhan_vien("WEB", device_id, after, moc_som_nhat)
 
 
+def _gio_vn(iso: str | None) -> str:
+    try:
+        return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).astimezone(timezone(timedelta(hours=7))).strftime("%d/%m %H:%M")
+    except (TypeError, ValueError):
+        return ""
+
+
+def ghi_chu_nhan_vien(kenh: str, ma_ngoai: str, session_key: str) -> str | None:
+    """Các tin nhân viên thật đã nhắn khách (tối đa 8, mỗi tin tối đa 500 ký tự) để đưa cho AI. Lỗi gì cũng bỏ qua: thiếu phần này AI vẫn trả lời được."""
+    try:
+        tin = admin_chat.tin_nhan_vien_gan_day(kenh, ma_ngoai, moc_lich_su_cu_nhat(session_key, MAX_HISTORY_TURNS))
+        if not tin:
+            return None
+        dong = []
+        for t in tin[-8:]:
+            chu = (t.get("text") or "").strip()[:500]
+            tep = f" [đính kèm {t.get('attachmentName') or 'tệp'}]" if t.get("attachmentType") else ""
+            dong.append(f"- {_gio_vn(t.get('createdAt'))} Nhân viên: {chu}{tep}".replace("  ", " ").rstrip())
+        return chr(10).join(dong)
+    except Exception:
+        return None
+
+
 def _xu_ly_chat(
     req: ChatRequest,
     nen: BackgroundTasks,
@@ -629,7 +702,8 @@ def _xu_ly_chat(
     # Bấm nút trong luồng đặt tour không tính vào giới hạn số câu hỏi (không gọi AI, không lưu tin nhắn).
     # Đang đặt tour dở: khách gõ chữ trả lời từng bước (không gọi AI) nên CHƯA áp giới hạn theo phút ở đây;
     # câu nào luồng đặt không nhận mà rơi sang chat thường (gọi AI) thì bị kiểm tra đủ ở bên dưới.
-    dang_dat_do = not req.action and dat_tour.dang_dat_do(session_key)
+    mang_xa_hoi = kenh in KENH_MANG_XA_HOI
+    dang_dat_do = not req.action and not mang_xa_hoi and dat_tour.dang_dat_do(session_key)
     ly_do_bi_chan = None if req.action else kiem_tra_rate_limit(
         user_id,
         float("inf") if dang_dat_do else RATE_LIMIT_PER_MINUTE,
@@ -660,27 +734,50 @@ def _xu_ly_chat(
 
     # Báo tin khách cho trang quản trị TRƯỚC khi trả lời: nhân viên đang xử lý thì bot im, khách đòi gặp người thì báo nhân viên.
     # Backend không trả lời thì None: bot vẫn trả lời khách như thường, còn câu của khách được ghi thẳng vào database ngay.
+    # Tin có số điện thoại mà còn hỏi chuyện khác: vẫn báo nhân viên, nhưng AI trả lời câu hỏi rồi nối câu "đã báo nhân viên" ở cuối.
+    cau_bao_nhan_vien = None  # câu "đã báo nhân viên" sẽ nối vào cuối câu AI trả lời
+    da_ghi_cau_bao = False  # backend đã tự lưu câu đó vào hội thoại thì không ghi lại lần nữa
     if not req.action:
         doi_nguoi = hoi_muon_gap_nhan_vien(req.message)
+        # Chưa tính khi đang đặt tour dở (khách gõ SĐT là trả lời bước của luồng đặt). Khách có sẵn SĐT (web, app) không bao giờ rơi vào ca "SDT".
+        ly_do_som = None if (doi_nguoi or dang_dat_do) else can_nhan_vien_som(req.message, bool((khach or {}).get("phone")))
+        if not doi_nguoi and not ly_do_som and mang_xa_hoi and _muon_dat_tour(req.message):
+            ly_do_som = "DAT_TOUR"
+        if not doi_nguoi and not ly_do_som and not dang_dat_do and hoi_ngay_khoi_hanh_sat(req.message):
+            ly_do_som = "NGAY_SAT"
+        ai_van_tra_loi = ly_do_som == "SDT" and co_cau_hoi_ngoai_sdt(req.message)
+        bao_nhan_vien = doi_nguoi or bool(ly_do_som)
         ma_tin_khach = admin_chat.ma_tin_moi()
-        tu_admin = admin_chat.inbound(kenh, ma_ngoai, req.message, khach, doi_nguoi, ma_tin=ma_tin_khach)
+        tu_admin = admin_chat.inbound(kenh, ma_ngoai, req.message, khach, bao_nhan_vien, ma_tin=ma_tin_khach,
+                                      cau_bao=TRA_LOI_NHAN_VIEN_SOM[ly_do_som] if ly_do_som in CAU_BAO_RIENG else None)
         if tu_admin is None:
-            nen.add_task(admin_chat.ghi_tin_khach_truc_tiep, kenh, ma_ngoai, khach, req.message, luc_khach_gui, ma_tin_khach, doi_nguoi)
+            nen.add_task(admin_chat.ghi_tin_khach_truc_tiep, kenh, ma_ngoai, khach, req.message, luc_khach_gui, ma_tin_khach, bao_nhan_vien)
         hanh_dong = (tu_admin or {}).get("action")
         if hanh_dong == "STAFF":
             luu_tin_nhan(session_key, "user", req.message, user_id=user_id)
             return {"reply": "", "tours": [], "goi_y": [], "che_do": "STAFF"}
-        if hanh_dong in ("AUTO_REPLY", "CONTACT") and tu_admin.get("reply"):
+        if hanh_dong == "CONTACT" and ai_van_tra_loi and tu_admin.get("reply"):
+            cau_bao_nhan_vien, da_ghi_cau_bao = tu_admin["reply"], True
+        elif hanh_dong in ("AUTO_REPLY", "CONTACT") and tu_admin.get("reply"):
             luu_tin_nhan(session_key, "user", req.message, user_id=user_id)
             luu_tin_nhan(session_key, "assistant", tu_admin["reply"], user_id=user_id)
             return {"reply": tu_admin["reply"], "tours": [], "goi_y": []}
+        if ly_do_som and tu_admin is None and ai_van_tra_loi:
+            cau_bao_nhan_vien = TRA_LOI_NHAN_VIEN_SOM[ly_do_som]
+        elif ly_do_som and tu_admin is None:
+            # Trang quản trị không trả lời: tin đã ghi thẳng database kèm cờ báo nhân viên, trả câu viết sẵn thay vì để AI trả lời lạc đề.
+            reply = TRA_LOI_NHAN_VIEN_SOM[ly_do_som]
+            luu_tin_nhan(session_key, "user", req.message, user_id=user_id)
+            luu_tin_nhan(session_key, "assistant", reply, user_id=user_id)
+            nen.add_task(admin_chat.bot_reply, kenh, ma_ngoai, reply, None, None, khach)
+            return {"reply": reply, "tours": [], "goi_y": []}
         if vuot_gioi_han:
             # Backend đang tắt, hoặc nhân viên vừa trả khách cho bot: tin đã được lưu ở trên nhưng không gọi AI cho tin vượt giới hạn.
             return {"reply": vuot_gioi_han, "tours": [], "goi_y": []}
 
     # Luồng ĐẶT TOUR (máy trạng thái, không qua Gemini): xem dat_tour.py. Khách web không có token nên chỉ ghi nhận yêu cầu
     # (nhân viên gọi lại), không tạo đơn thật trên NestJS.
-    ket_qua_dat_tour = dat_tour.xu_ly(
+    ket_qua_dat_tour = None if mang_xa_hoi else dat_tour.xu_ly(
         session_key, token, req.message, req.action.model_dump() if req.action else None
     )
     if ket_qua_dat_tour is not None:
@@ -704,6 +801,16 @@ def _xu_ly_chat(
         )
         if ly_do_bi_chan:
             return {"reply": ly_do_bi_chan, "tours": [], "goi_y": []}
+
+    # Câu không liên quan du lịch (giải toán, code, tài chính, chính trị, phạm pháp...): trả câu viết sẵn, không gọi AI, không kèm thẻ tour.
+    # Đặt sau luồng đặt tour và sau khi đã báo trang quản trị: nhân viên đang xử lý thì đã dừng ở trên, tin vẫn được lưu.
+    loai_ngoai_le = None if hoi_muon_gap_nhan_vien(req.message) else ngoai_pham_vi.phan_loai(req.message)
+    if loai_ngoai_le:
+        reply = ngoai_pham_vi.cau_tra_loi(loai_ngoai_le)
+        luu_tin_nhan(session_key, "user", req.message, user_id=user_id)
+        luu_tin_nhan(session_key, "assistant", reply, user_id=user_id)
+        nen.add_task(admin_chat.bot_reply, kenh, ma_ngoai, reply, None, None, khach)
+        return {"reply": reply, "tours": [], "goi_y": []}
 
     lich_su = lay_lich_su(session_key, MAX_HISTORY_TURNS)
 
@@ -742,6 +849,11 @@ def _xu_ly_chat(
         goi_y_gia: dict = {}
         goi_y_gan_dung: dict = {}
         tours_raw = tim_tour_lien_quan(req.message, lich_su=lich_su, goi_y_gia=goi_y_gia, goi_y_gan_dung=goi_y_gan_dung)
+        tin_nhan_vien = ghi_chu_nhan_vien(kenh, ma_ngoai, session_key)
+        # Câu viết sẵn "chưa có tour X vào ngày/tháng Y" chỉ hiểu một nơi một ngày và không đọc tin nhân viên: nhân viên vừa hỏi khách
+        # (câu khách là câu trả lời) hoặc câu nêu nhiều nơi / nhiều ngày thì để AI trả lời với cùng danh sách tour.
+        nhan_vien_vua_hoi = bool(tin_nhan_vien) and la_cau_hoi_cua_nhan_vien(tin_nhan_vien.rsplit(chr(10), 1)[-1].split("Nhân viên:", 1)[-1])
+        viet_san_duoc = not (nhan_vien_vua_hoi or nhieu_noi_hoac_nhieu_ngay(req.message))
         noi_khong_co = None if tours_raw or goi_y_gia or goi_y_gan_dung or trich_diem_den(req.message) else dia_danh_khong_co_tour(req.message)
         if goi_y_gia:
             tours_raw = goi_y_gia["tours"]
@@ -762,16 +874,32 @@ def _xu_ly_chat(
             if goi_y_gia:
                 reply = tra_loi_khong_co_trong_tam_gia(goi_y_gia, req.message)
                 tours = [chuan_hoa_the_tour(t) for t in goi_y_gia["tours"]]  # thẻ theo đúng thứ tự câu trả lời nêu
-            elif noi_khong_co:
+            elif noi_khong_co and viet_san_duoc:
                 reply = tra_loi_noi_khong_co_tour(noi_khong_co)
-            elif goi_y_gan_dung:
+            elif goi_y_gan_dung and viet_san_duoc:
                 reply = tra_loi_gan_dung(goi_y_gan_dung)
-            elif hoi_cach_dat_tour(req.message):
+            elif hoi_cach_dat_tour(req.message) and not mang_xa_hoi:
                 # Câu viết sẵn dẫn về app, không gọi AI (AI hay bảo khách nhắn "gặp nhân viên" để đặt).
                 reply = TRA_LOI_CACH_DAT_TOUR
             else:
                 # Dòng phân cách đã hiện sẵn trên thẻ; đưa cho AI thì nó chép lại nguyên văn vào câu trả lời.
-                reply = hoi_gemini(req.message, [{k: v for k, v in t.items() if k != "phan_cach_truoc"} for t in tours], lich_su)
+                ghi_chu = ghi_chu_kenh(kenh, khach)
+                if nhan_vien_vua_hoi:
+                    # Bug thật: nhân viên hỏi "rớt visa bao lâu rồi", khách đáp "Đầu tháng 4 e", AI vẫn hiểu là tìm tour tháng 4.
+                    ghi_chu = (ghi_chu + chr(10) if ghi_chu else "") + (
+                        "Tin nhân viên gần nhất là một CÂU HỎI gửi khách. Câu khách vừa nhắn là câu TRẢ LỜI cho câu hỏi đó, không phải yêu cầu tìm "
+                        "tour mới: ghi nhận câu trả lời, đừng nói có hay không có tour theo ngày tháng trong câu."
+                    )
+                if cau_bao_nhan_vien:
+                    # Câu "đã ghi nhận số, đã báo nhân viên" được nối sẵn ở cuối: AI chỉ trả lời câu hỏi, không nhắc lại (bug thật: nói 2 lần).
+                    ghi_chu = (ghi_chu + chr(10) if ghi_chu else "") + (
+                        "Hệ thống ĐÃ ghi nhận số điện thoại khách và báo nhân viên; câu báo này sẽ được thêm ở cuối. Chỉ trả lời câu hỏi của khách, "
+                        "không nhắc lại số điện thoại, không nói đã ghi nhận số hay nhân viên sẽ gọi."
+                    )
+                # Câu hỏi cọc / huỷ / bao gồm / tip...: đưa chính sách thật của tour khách đang hỏi (API chi tiết tour) cho Gemini.
+                chinh_sach = chinh_sach_tour.khoi_chinh_sach(req.message, tours)
+                reply = hoi_gemini(req.message, [{k: v for k, v in t.items() if k != "phan_cach_truoc"} for t in tours], lich_su, tin_nhan_vien,
+                                   ghi_chu_kenh=ghi_chu, **({"chinh_sach": chinh_sach} if chinh_sach else {}))
         except Exception:
             # AI treo / hết quota / mất mạng: khách vẫn nhận được thẻ tour (đã tìm xong ở trên) thay vì lỗi 500.
             reply = None
@@ -782,21 +910,27 @@ def _xu_ly_chat(
         if con_lai:
             reply += "\n\n" + nhac_xem_tiep(con_lai)
     dat_tour.ghi_tour_gan_nhat(session_key, tours)
-    if tours and not goi_y_lam_ro:
+    if tours and not goi_y_lam_ro and not mang_xa_hoi:
         goi_y_lam_ro = ["Tôi muốn đặt tour này"]
     if tours and con_lai:
         goi_y_lam_ro = ["Còn tour nào không", *goi_y_lam_ro]
 
     # Khách hỏi câu khác GIỮA luồng đặt tour: trả lời xong thì nhắc + hiện lại nút của bước đang dở để khách đặt tiếp.
-    nhac = dat_tour.nhac_buoc_dang_do(session_key) if dang_dat_do else None
+    # Khách đang xem TOUR KHÁC (câu hỏi ra thẻ tour không có tour đang đặt): hỏi 3 hướng thay vì chỉ nhắc đặt tiếp.
+    nhac = dat_tour.nhac_buoc_dang_do(session_key, tour_khac=dat_tour.hoi_tour_khac(session_key, tours)) if dang_dat_do else None
     if nhac:
         reply = reply + "\n\n" + nhac.pop("reply")
         goi_y_lam_ro = []
 
+    tra_loi_ghi_lai = reply  # phần bot cần ghi vào trang quản trị
+    if cau_bao_nhan_vien:
+        reply = reply + "\n\n" + cau_bao_nhan_vien
+        if not da_ghi_cau_bao:
+            tra_loi_ghi_lai = reply
     luu_tin_nhan(session_key, "user", req.message, user_id=user_id)
     luu_tin_nhan(session_key, "assistant", reply, user_id=user_id)
     # Chạy sau khi đã trả lời khách để khách không phải chờ thêm.
-    nen.add_task(admin_chat.bot_reply, kenh, ma_ngoai, reply, tours, lay_token_cau_vua_hoi(), khach)
+    nen.add_task(admin_chat.bot_reply, kenh, ma_ngoai, tra_loi_ghi_lai, tours, lay_token_cau_vua_hoi(), khach)
     ket_qua = {"reply": reply, "tours": tours, "goi_y": goi_y_lam_ro}
     if nhac:
         ket_qua.update({k: v for k, v in nhac.items() if k in ("choices", "multi", "toi_da")})

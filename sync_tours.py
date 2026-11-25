@@ -182,6 +182,7 @@ def dong_bo():
     # Bước 3 — lấy chi tiết từng tour DUY NHẤT, chỉ giữ trường tóm tắt (§5)
     documents, metadatas, ids = [], [], []
     slug_da_dung: dict[str, int] = {}  # đếm số lần trùng slug, xử lý như site thật (hậu tố -1, -2...)
+    cach_viet_diem_den: dict[str, str] = {}  # điểm đến viết thường -> cách viết dùng chung
 
     for ten, info in tour_theo_ten.items():
         chi_tiet = lay_chi_tiet_tour(info["id_dai_dien"])
@@ -197,6 +198,9 @@ def dong_bo():
         # Ưu tiên destination_place THẬT từ API, chỉ suy luận từ tên khi API
         # trả rỗng (xem lý do ở suy_luan_diem_den()).
         diem_den = chi_tiet["destination_place"] or suy_luan_diem_den(chi_tiet["name"])
+        # Website ghi cùng một nơi khác chữ hoa thường ("Vương Quốc Anh" / "Vương quốc Anh", 11/2026): gộp về cách viết gặp đầu tiên,
+        # nếu không khách hỏi "tour Anh" chỉ thấy tour của một cách viết.
+        diem_den = cach_viet_diem_den.setdefault(" ".join(diem_den.split()).casefold(), " ".join(diem_den.split()))
 
         # [GEMINI] T-002: Lấy URL ảnh đại diện đầy đủ từ API chi tiết
         anh_raw = chi_tiet.get("image") or (chi_tiet.get("images")[0] if chi_tiet.get("images") else "") or ""

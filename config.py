@@ -36,3 +36,6 @@ INGEST_API_KEY = os.environ.get("INGEST_API_KEY", "").strip()
 ADMIN_CHAT_PUBLIC_URL = os.environ.get("ADMIN_CHAT_PUBLIC_URL", "").strip() or ADMIN_CHAT_URL
 # Chính database của trang quản trị: backend bên đó không chạy thì chatbot ghi thẳng lịch sử vào đây (xem lich_su_db.py).
 ADMIN_DATABASE_URL = os.environ.get("ADMIN_DATABASE_URL", "").strip()
+# Website được nhúng khung chat web (static/chat.html) bằng static/widget.js, cách nhau dấu cách. Website khác nhúng thì trình duyệt chặn.
+# Mặc định: benthanhtourist.com và mọi tên miền con. Đặt "*" để cho mọi website (không nên).
+NHUNG_CHO_PHEP = os.environ.get("NHUNG_CHO_PHEP", "").strip() or "https://benthanhtourist.com https://*.benthanhtourist.com"

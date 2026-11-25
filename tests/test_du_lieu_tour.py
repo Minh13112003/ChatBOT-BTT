@@ -17,6 +17,12 @@ for _m in TOAN_BO:
     TEN_TOUR.setdefault(_m["ten"], _m["tour_key"])
 
 
+def _con_ban(dia_danh: str) -> bool:
+    """Website còn mở bán tour mang địa danh này. Tour bị ẩn (is_available = false, ví dụ Dubai từ 11/2026) thì không có trong dữ liệu,
+    test bỏ qua địa danh đó thay vì báo hỏng giả."""
+    return any(dat_tour._chuan(dia_danh) in dat_tour._chuan(m["ten"]) for m in TOAN_BO)
+
+
 @unittest.skipUnless(TOAN_BO, "ChromaDB chưa có dữ liệu tour (chạy python sync_tours.py)")
 class TimTourTheoDiemDen(unittest.TestCase):
     def test_moi_diem_den_trong_du_lieu_deu_tim_ra_tour(self):
@@ -53,6 +59,8 @@ class TimTourTheoDiemDen(unittest.TestCase):
         }
         for cau, dd in mong.items():
             with self.subTest(cau=cau):
+                if dd is not None and dd not in CAC_DIEM_DEN:
+                    self.skipTest(f"Hiện không có tour {dd} đang bán")
                 kq = {t["diem_den"] for t in rag.tim_tour_lien_quan(cau)}
                 if dd is None:
                     self.assertTrue(kq & {"Đài Bắc (Taipei)", "Cao Hùng (Kaohsiung)"}, kq)
@@ -65,6 +73,8 @@ class TimTourTheoDiemDen(unittest.TestCase):
                          "Cà Mau", "Miền Tây", "Phú Quốc", "Nha Trang", "Phan Thiết", "Núi Bà Đen", "Dubai", "Bali", "Chiang Mai",
                          "Penang", "Hokkaido", "Seoul", "Bangkok", "Istanbul", "Balkans", "Bắc Âu", "Scotland", "Melbourne", "Đài Loan"]:
             with self.subTest(dia_danh=dia_danh):
+                if not _con_ban(dia_danh):
+                    self.skipTest(f"Hiện không có tour {dia_danh} đang bán")
                 tours = rag.tim_tour_lien_quan(f"Có tour {dia_danh} không?")
                 self.assertTrue(tours, f"'{dia_danh}': không ra tour")
                 self.assertTrue(any(dat_tour._chuan(dia_danh) in dat_tour._chuan(t["ten"]) for t in tours),
@@ -73,6 +83,8 @@ class TimTourTheoDiemDen(unittest.TestCase):
     def test_dat_theo_dia_danh_chi_ra_tour_co_dia_danh_do(self):
         for dia_danh in ["Sapa", "Quy Nhơn", "Đà Lạt", "Huế", "Bali", "Dubai"]:
             with self.subTest(dia_danh=dia_danh):
+                if not _con_ban(dia_danh):
+                    self.skipTest(f"Hiện không có tour {dia_danh} đang bán")
                 cands = dat_tour._tim_ung_vien(f"Tôi muốn đặt tour {dia_danh}", {})
                 self.assertTrue(cands)
                 self.assertTrue(all(dat_tour._chuan(dia_danh) in dat_tour._chuan(c["ten"]) for c in cands), [c["ten"] for c in cands])

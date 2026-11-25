@@ -188,6 +188,23 @@ def _la_cau_hoi(message: str) -> bool:
 _DAT_KHONG_CHU_TOUR = re.compile(r"\b(dat cho|dat ve|giu cho|book ve)\b")
 _LAY_TOUR = re.compile(r"\blay tour\b")
 _VE_KHAC = re.compile(r"\b(may bay|ve xe|ve tau|khach san|phong|ve vao cong|ve xem|ve concert|ve cau)\b")
+# Khách chỉ HỎI chứ chưa muốn đặt tour (đánh giá 160 câu 2026-11-23): "muốn hỏi thêm tour Nha Trang, hỏi được ko" hay "đặt giùm khách sạn,
+# ko đi tour" bị mở nhầm luồng đặt tour.
+_HOI_THEM = re.compile(r"\b(muon hoi|hoi them|hoi duoc (ko|khong|k)|hoi (dc|duoc) (ko|khong|k))\b")
+_KHONG_DI_TOUR = re.compile(r"\b(khong|ko|k|chang)\s+(di|mua|dat|di theo)\s+tour\b")
+# Câu hỏi thông tin / quyền lợi có nhắc "đăng ký/đặt tour" ("đăng ký tour thì cần lưu ý gì về visa?", "đặt tiếp có ưu đãi thân thiết không?").
+_HOI_THONG_TIN = re.compile(
+    r"\b(luu y|can gi|can nhung gi|giay to|ho so|visa|ho chieu|uu dai|giam gia|khuyen mai|ma giam|than thiet|bao hiem|phu thu|hoa don|vat)\b"
+)
+
+
+def _chi_hoi_khong_dat(message: str, nd: str) -> bool:
+    if _HOI_THEM.search(nd) or _KHONG_DI_TOUR.search(nd):
+        return True
+    if _la_cau_hoi(message):
+        # Câu hỏi có nhắc vé máy bay / khách sạn / giấy tờ / ưu đãi: là hỏi thông tin, bấm "Tôi muốn đặt tour này" sau khi được trả lời.
+        return bool(_VE_KHAC.search(nd) or _HOI_THONG_TIN.search(nd))
+    return False
 
 
 def hoi_dat_tour(message: str) -> bool:
@@ -203,7 +220,20 @@ def hoi_dat_tour(message: str) -> bool:
         return False  # "chưa muốn đặt tour đâu, chỉ hỏi giá" -> chỉ hỏi, không mở luồng đặt
     # "đặt cọc thế nào", "huỷ tour được không", "làm sao để đặt" -> câu hỏi chính sách, để Gemini trả lời
     # "các bước đặt tour", "đặt tour ở đâu" -> hỏi cách đặt, không phải muốn đặt ngay
-    return not (_HOI_CHINH_SACH.search(nd) or rag.la_cau_hoi_cach_dat(message))
+    return not (_HOI_CHINH_SACH.search(nd) or rag.la_cau_hoi_cach_dat(message) or _chi_hoi_khong_dat(message, nd))
+
+
+_DANG_KY_LUON = re.compile(r"\b(dang ky|dang ki|book|giu cho|chot)\b")
+_QUEN_DANG_KY = re.compile(r"\bquen (dang|book|chot|giu)\b")
+
+
+def muon_dang_ky(message: str) -> bool:
+    """Khách nói muốn đăng ký / book / giữ chỗ / chốt dù không có chữ "tour" ("nếu phù hợp thì hôm nay chị đăng ký luôn"). Dùng cho
+    Zalo/Facebook để báo nhân viên; không tính câu hỏi chính sách, chuyện đã đặt, chưa muốn đặt, hay "quên đăng ký"."""
+    nd = _nd(message)
+    if not _DANG_KY_LUON.search(nd):
+        return False
+    return not (_DA_DAT.search(nd) or _CHUA_MUON_DAT.search(nd) or _HOI_CHINH_SACH.search(nd) or _QUEN_DANG_KY.search(nd) or _VE_KHAC.search(nd))
 
 
 # "chốt", "đặt luôn", "ok chốt đi", "giữ chỗ giúp mình" — muốn đặt mà không nói chữ "tour" lẫn tên tour.
@@ -333,15 +363,15 @@ def lay_than_nhan(token: str) -> list[dict] | None:
 
 
 def cac_dot_khoi_hanh(data: dict) -> list[dict]:
-    """Các đợt còn chỗ, từ hôm nay trở đi. Gộp cả đợt top-level nếu chưa có trong tour_days[] (dữ liệu Laravel hay lệch)."""
+    """Các đợt còn chỗ, khởi hành từ rag.SO_NGAY_BAO_TRUOC_GOI_Y ngày sau trở đi. Gộp cả đợt top-level nếu chưa có trong tour_days[] (dữ liệu Laravel hay lệch)."""
     dots = []
     for d in data.get("tour_days") or []:
         dots.append({"key": str(d.get("id")), "date": str(d.get("departure_date", ""))[:10], "price": d.get("price"), "seats": d.get("stock_qty"), "code": d.get("code")})
     top = str(data.get("departure_date", ""))[:10]
     if top and all(x["date"] != top for x in dots):
         dots.append({"key": str(data.get("id")), "date": top, "price": data.get("price"), "seats": data.get("stock_qty"), "code": data.get("code")})
-    hom_nay = date.today().isoformat()
-    dots = [x for x in dots if x["date"] >= hom_nay and (x["seats"] or 0) > 0]
+    som_nhat = rag.ngay_som_nhat_goi_y()
+    dots = [x for x in dots if x["date"] >= som_nhat and (x["seats"] or 0) > 0]
     return sorted(dots, key=lambda x: x["date"])
 
 
@@ -424,7 +454,7 @@ SO_TOUR_GOI_Y = 5
 def tour_goi_y(so_luong: int = SO_TOUR_GOI_Y) -> list[dict]:
     """Vài tour để khách bấm khi chưa nói / chatbot không nhận ra tour nào: còn chỗ, khởi hành sớm nhất,
     mỗi điểm đến một tour (dữ liệu Chroma; ngày/chỗ thật được kiểm lại khi khách chọn tour)."""
-    hom_nay = date.today().isoformat()
+    som_nhat = rag.ngay_som_nhat_goi_y()
     ung_vien = []
     for m in rag._collection.get()["metadatas"]:
         ngay = str(m.get("ngay_khoi_hanh") or "")[:10]
@@ -432,7 +462,7 @@ def tour_goi_y(so_luong: int = SO_TOUR_GOI_Y) -> list[dict]:
             con_cho = int(m.get("so_cho_con") or 0)
         except (TypeError, ValueError):
             con_cho = 0
-        if m.get("tour_key") and ngay >= hom_nay and con_cho > 0:
+        if m.get("tour_key") and ngay >= som_nhat and con_cho > 0:
             ung_vien.append((ngay, str(m.get("diem_den") or ""), str(m["tour_key"]), str(m.get("ten") or "")))
     chon, da_co_dd, da_co_key = [], set(), set()
     for ngay, dd, key, ten in sorted(ung_vien):
@@ -888,14 +918,37 @@ def xu_ly(session_key: str, token: str, message: str, action: dict | None) -> di
         return _kq("Mình bị lạc bước đặt tour một chút. Bạn nói lại “tôi muốn đặt tour…” để mình hỗ trợ từ đầu nhé.")
 
 
-def nhac_buoc_dang_do(session_key: str) -> dict | None:
+def hoi_tour_khac(session_key: str, tours: list[dict]) -> bool:
+    """Câu vừa hỏi (chat thường đã trả lời) cho ra thẻ tour mà KHÔNG có tour đang đặt dở: khách đang xem tour khác giữa chừng."""
+    st = _doc(session_key) or {}
+    key = (st.get("tour") or {}).get("key")
+    keys = {str(t.get("tour_key") or "") for t in tours or []} - {""}
+    return bool(st.get("step") and key and keys and key not in keys)
+
+
+def _ten_ngan(ten: str, toi_da: int = 34) -> str:
+    return ten if len(ten) <= toi_da else ten[: toi_da - 1].rstrip() + "…"
+
+
+def nhac_buoc_dang_do(session_key: str, tour_khac: bool = False) -> dict | None:
     """Khách hỏi câu khác giữa luồng (chat thường đã trả lời): lời nhắc ngắn + các nút của bước đang dở để khách đặt tiếp.
-    None = không có phiên đặt tour nào đang chạy."""
+    `tour_khac` (khách đang xem tour khác với tour đang đặt): hỏi khách chọn 3 hướng: tư vấn tour mới / đặt tiếp tour cũ / huỷ.
+    None = không có phiên đặt tour nào đang chạy, hoặc khách đã chọn "tiếp tục tư vấn" (tạm dừng, không nhắc nữa)."""
     st = _doc(session_key) or {}
     try:
         step = st.get("step")
-        if not step:
+        if not step or st.get("tam_dung"):
             return None
+        if tour_khac and step != "chon_tour" and st.get("tour"):
+            ten = st["tour"]["ten"]
+            return _kq(
+                f"Bạn đang trong quá trình đặt tour “{ten}”. Bạn muốn làm gì tiếp ạ?",
+                [
+                    {"id": "dd:tu_van", "label": "Tiếp tục tư vấn tour mới"},
+                    {"id": "dd:tiep", "label": f"Tiếp tục đặt “{_ten_ngan(ten)}”"},
+                    {"id": "huy", "label": f"Huỷ đặt “{_ten_ngan(ten)}”"},
+                ],
+            )
         if step == "chon_tour":
             return _kq("Bạn vẫn đang đặt tour dở, bạn gõ tên tour/điểm đến muốn đặt để mình hỗ trợ tiếp nhé.", [_NUT_HUY])
         ten = st["tour"]["ten"]
@@ -926,6 +979,21 @@ def _xu_ly(session_key: str, token: str, message: str, action: dict | None, st: 
         if not dang_chay and not aid.startswith("tour:"):
             # Nút của phiên không có thật (hết hạn, hoặc ai đó gọi API công khai): vẫn trả lời nhưng không ghi vào lịch sử.
             return {**_kq("Phiên đặt tour đã hết hạn. Bạn nói lại “tôi muốn đặt tour…” để mình hỗ trợ nhé."), "_khong_ghi": True}
+        if aid == "dd:tiep":
+            # Khách chọn "Tiếp tục đặt tour cũ" sau khi xem tour khác: bỏ trạng thái tạm dừng, đưa về đúng bước đang dở.
+            st.pop("tam_dung", None)
+            _ghi(session_key, st)
+            return nhac_buoc_dang_do(session_key) or _kq("Mình tiếp tục đặt tour giúp bạn nhé.")
+        if aid == "dd:tu_van":
+            # Khách chọn "Tiếp tục tư vấn tour mới": giữ đơn đang dở nhưng tạm dừng, không nhắc lại mỗi câu hỏi.
+            st["tam_dung"] = True
+            _ghi(session_key, st)
+            ten = (st.get("tour") or {}).get("ten", "")
+            return _kq(
+                f"Dạ mình tiếp tục tư vấn tour mới cho bạn nhé, bạn cứ hỏi mình. Việc đặt tour “{ten}” mình vẫn giữ lại, "
+                "khi nào muốn đặt tiếp bạn bấm nút bên dưới hoặc nhắn “đặt tiếp” nhé.",
+                [{"id": "dd:tiep", "label": f"Tiếp tục đặt “{_ten_ngan(ten)}”"}, {"id": "huy", "label": f"Huỷ đặt “{_ten_ngan(ten)}”"}],
+            )
         if aid.startswith("tour:"):
             return _chon_tour(session_key, st, aid[5:])
         # Nút của bước cũ (khách bấm lại nút đã qua) -> đưa về đúng bước đang dở thay vì lỗi.
@@ -994,14 +1062,23 @@ def _xu_ly(session_key: str, token: str, message: str, action: dict | None, st: 
         if not dang_chay and not cands and _la_cau_hoi(message):
             # Bug thật: "Đặt tour qua chat thì có cần gửi CCCD không?" bị cuốn vào luồng đặt tour ("chưa tìm thấy tour…")
             return None
-        if dang_chay and st.get("step") != "chon_tour" and _van_la_tour_dang_dat(message, st, cands):
+        if dang_chay and not st.get("tam_dung") and st.get("step") != "chon_tour" and _van_la_tour_dang_dat(message, st, cands):
             pass  # "ok chốt tour này", "đặt tour này cho 3 người lớn": vẫn là tour đang đặt -> là câu trả lời của bước đang dở
-        elif not dang_chay or cands or st.get("step") == "chon_tour":
+        elif not dang_chay or cands or st.get("step") == "chon_tour" or st.get("tam_dung"):
+            # Đang tạm dừng (khách chọn "tiếp tục tư vấn tour mới"): "đặt tour này" là nói về tour vừa tư vấn, mở luồng đặt mới.
             # Bắt đầu mới (hoặc đổi sang tour khác giữa chừng): giữ lại danh sách tour vừa gợi ý, bỏ phần còn lại.
             moi = {"last_tours": st.get("last_tours", []), "step": None}
             return _bat_dau_voi_ung_vien(session_key, moi, cands, message)
 
     if not dang_chay:
+        return None
+
+    # Đang tạm dừng việc đặt tour để tư vấn tour mới: chỉ khi khách nói rõ "đặt tiếp" mới quay lại; còn lại để chat thường trả lời.
+    if st.get("tam_dung"):
+        if _DAT_TIEP.search(cau):
+            st.pop("tam_dung", None)
+            _ghi(session_key, st)
+            return nhac_buoc_dang_do(session_key)
         return None
 
     # Khách HỎI câu khác giữa luồng (vd "visa có khó không?") mà bước đang dở không đọc ra câu trả lời hợp lệ nào
@@ -1063,6 +1140,7 @@ def _xu_ly(session_key: str, token: str, message: str, action: dict | None, st: 
     return None
 
 
+_DAT_TIEP = re.compile(r"\b(dat|chot) tiep\b|\btiep tuc (viec )?(dat|chot)\b|\bquay lai (viec )?(dat|chot)\b")
 _QUAY_LAI = re.compile(r"^(quay lai|lui lai|tro lai|buoc truoc|back)( buoc truoc| di| nha| nhe| a| ban)*$")
 _DOI_TOUR = re.compile(r"\b(doi|chuyen|sang) (sang |qua |lai )?tour\b|\btour khac\b")
 _LAM_LAI = re.compile(r"\b(lam lai|dat lai|bat dau lai|nhap lai)\b|\btu dau\b")

@@ -57,10 +57,20 @@ class QuaApiChat(NenTest):
         self.gemini.assert_not_called()
 
     def test_noi_khong_co_tour_tra_loi_thang(self):
-        res = self.gui("tour mỹ bao nhiêu tiền")
-        self.assertIn("chưa có tour đi Mỹ", res["reply"])
+        # Trước đây dùng "tour mỹ"; từ 11/2026 công ty có tour Alaska (Mỹ - Canada) nên đổi sang nơi chưa có tour.
+        res = self.gui("tour peru bao nhiêu tiền")
+        self.assertIn("chưa có tour đi Peru", res["reply"])
         self.assertEqual(res["tours"], [])
         self.gemini.assert_not_called()
+
+    def test_my_khong_bat_nham_my_tho_tham_my(self):
+        for cau in ["tour Mỹ Tho", "tour Mỹ Khê Đà Nẵng", "tour Nam Mỹ", "đi thẩm mỹ viện", "tour Miền Tây Mỹ Tho Cần Thơ"]:
+            with self.subTest(cau=cau):
+                self.assertNotEqual(rag.trich_diem_den(cau), "Hoa Kỳ")
+        if any(m["diem_den"] == "Hoa Kỳ" for m in TOAN_BO):
+            for cau in ["tour mỹ bao nhiêu tiền", "có tour đi Mỹ không", "tour USA", "tour Alaska"]:
+                with self.subTest(cau=cau):
+                    self.assertEqual(rag.trich_diem_den(cau), "Hoa Kỳ")
 
     def test_hoi_hotline_co_dia_chi(self):
         res = self.gui("Văn phòng BenThanh Tourist ở đâu, hotline số mấy?")

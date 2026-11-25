@@ -101,6 +101,17 @@ def lay_lich_su(session_id: str, so_luot: int) -> list[dict]:
     return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
 
 
+def moc_lich_su_cu_nhat(session_id: str, so_luot: int) -> str | None:
+    """Giờ (UTC, dạng ISO) của tin cũ nhất trong số lượt gửi lại cho AI; None khi chưa có lịch sử."""
+    with ket_noi() as conn:
+        row = conn.execute(
+            """SELECT MIN(created_at) FROM (SELECT created_at FROM chat_messages
+               WHERE session_id = ? ORDER BY id DESC LIMIT ?)""",
+            (session_id, so_luot * 2),
+        ).fetchone()
+    return (row[0].replace(" ", "T") + "Z") if row and row[0] else None
+
+
 # [GEMINI] T-003: Rate limit tính theo user_id (tránh đổi conversation_id để né)
 def kiem_tra_rate_limit(
     identifier: str,

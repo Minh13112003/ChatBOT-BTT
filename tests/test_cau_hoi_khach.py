@@ -467,7 +467,8 @@ class HoiTheoThoiGian(Nen):
     def test_diem_den_kem_thang(self):
         """Mỗi điểm đến hỏi kèm một tháng có chuyến và một tháng không có chuyến."""
         for dd in CAC_DIEM_DEN:
-            thang_co = sorted({int(m["ngay_khoi_hanh"][5:7]) for m in TOAN_BO if m["diem_den"] == dd})
+            # Tính cả tour mang tên điểm đến dù dữ liệu ghi nơi khác ("Du Lịch Trung Quốc (Tết...)" có diem_den = Thượng Hải)
+            thang_co = sorted({int(m["ngay_khoi_hanh"][5:7]) for m in TOAN_BO if m["diem_den"] == dd or dau_ten(m["ten"]) == dd})
             thang_khong = [th for th in range(1, 13) if th not in thang_co]
             cau = f"tour {dd} tháng {thang_co[0]}"
             with self.subTest(cau=cau):

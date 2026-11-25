@@ -76,8 +76,12 @@ def identify(kenh: str, ma_ngoai: str, ten: str, sdt: str) -> httpx.Response | N
     return _goi("POST", "/identify", json={"channel": kenh, "externalUserId": ma_ngoai, "name": ten, "phone": sdt})
 
 
-def inbound(kenh: str, ma_ngoai: str, text: str, khach: dict | None, wants_human: bool, ma_tin: str | None = None) -> dict | None:
+def inbound(kenh: str, ma_ngoai: str, text: str, khach: dict | None, wants_human: bool, ma_tin: str | None = None,
+            cau_bao: str | None = None) -> dict | None:
+    """`cau_bao`: câu báo khách thay câu mặc định khi trang quản trị chuyển hội thoại sang Liên hệ (cần backend có trường contactReply)."""
     body = {"channel": kenh, "externalUserId": ma_ngoai, "text": text[:DO_DAI_TIN_KHACH_TOI_DA], "wantsHuman": wants_human}
+    if cau_bao and wants_human:
+        body["contactReply"] = cau_bao[:500]
     if khach:
         body["customer"] = khach
     if ma_tin:
@@ -158,6 +162,16 @@ def deal(kenh: str, ma_ngoai: str, don: dict, khach: dict | None = None) -> None
 def updates(kenh: str, ma_ngoai: str, sau_moc: str) -> dict | None:
     params = {"channel": kenh, "externalUserId": ma_ngoai, "after": sau_moc}
     return _json_neu_thanh_cong(_goi("GET", "/updates", params=params), "/updates")
+
+
+def tin_nhan_vien_gan_day(kenh: str, ma_ngoai: str, sau_moc: str | None) -> list[dict] | None:
+    """Tin nhân viên thật đã nhắn khách (cũ trước, mới sau) để đưa cho AI biết nhân viên đã nói gì. Chỉ đọc, không đánh dấu khách đã xem.
+    Không nối được trang quản trị thì trả None (AI vẫn trả lời, chỉ thiếu phần ngữ cảnh này)."""
+    if not da_cau_hinh():
+        return None
+    params = {"channel": kenh, "externalUserId": ma_ngoai, **({"after": sau_moc} if sau_moc else {})}
+    kq = _json_neu_thanh_cong(_goi("GET", "/staff-history", params=params), "/staff-history")
+    return kq.get("items", []) if kq else None
 
 
 def nhan_vien_dang_xu_ly(kenh: str, ma_ngoai: str) -> bool:
