@@ -139,6 +139,8 @@ Các API này công khai, giới hạn theo IP:
 <script src="https://<tên miền chatbot>/static/widget.js" async></script>
 ```
 
+Trên VPS chatbot chạy ở **https://chatbot.benthanhtourist.com** (Docker, xem `deploy/HUONG-DAN-DEPLOY.md`), nên dòng cần dán là `<script src="https://chatbot.benthanhtourist.com/static/widget.js" async></script>`.
+
 `widget.js` tạo iframe ở góc dưới phải nạp `/static/chat.html?nhung=1` (nút tròn, bấm mở khung chat 400px, điện thoại toàn màn hình). Chatbot phải chạy https. Website được nhúng đặt ở `NHUNG_CHO_PHEP` (mặc định benthanhtourist.com và tên miền con); website khác nhúng thì trình duyệt chặn (header `frame-ancestors`).
 
 ---

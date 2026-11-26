@@ -17,6 +17,12 @@ _client = chromadb.PersistentClient(path=CHROMA_PATH)
 _collection = _client.get_or_create_collection(CHROMA_COLLECTION)
 
 
+def nap_lai_kho() -> None:
+    """Gọi sau khi sync_tours.dong_bo() xoá rồi tạo lại kho tour: chatbot đang chạy phải lấy kho mới, kho cũ đã bị xoá."""
+    global _collection
+    _collection = _client.get_or_create_collection(CHROMA_COLLECTION)
+
+
 # Chỉ gợi ý lượt khởi hành từ 3 ngày sau hôm nay trở đi (chủ dự án chốt 19/11/2026): sát ngày thì sale không kịp chốt, làm giấy tờ
 # (bug thật: ngày 19/11 bot gợi ý tour Hồng Kông khởi hành chính ngày 19/11).
 SO_NGAY_BAO_TRUOC_GOI_Y = 3

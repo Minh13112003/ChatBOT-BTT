@@ -14,10 +14,11 @@ CATEGORY_IDS_LOAI_HINH = {
     78: "Free & Easy",
 }
 
-CHROMA_PATH = "./tour_db"
+# Chạy trong Docker thì đặt ra thư mục lưu lâu dài (volume), ví dụ /data/tour_db và /data/chatbot.sqlite3.
+CHROMA_PATH = os.environ.get("CHROMA_PATH", "").strip() or "./tour_db"
 CHROMA_COLLECTION = "benthanh_tours"
 
-DATABASE_PATH = "./chatbot.sqlite3"
+DATABASE_PATH = os.environ.get("DATABASE_PATH", "").strip() or "./chatbot.sqlite3"
 
 # [GEMINI] Cấu hình Gemini API (SDK OpenAI trỏ sang Gemini endpoint)
 # Lấy key miễn phí tại https://aistudio.google.com/apikey
@@ -39,3 +40,8 @@ ADMIN_DATABASE_URL = os.environ.get("ADMIN_DATABASE_URL", "").strip()
 # Website được nhúng khung chat web (static/chat.html) bằng static/widget.js, cách nhau dấu cách. Website khác nhúng thì trình duyệt chặn.
 # Mặc định: benthanhtourist.com và mọi tên miền con. Đặt "*" để cho mọi website (không nên).
 NHUNG_CHO_PHEP = os.environ.get("NHUNG_CHO_PHEP", "").strip() or "https://benthanhtourist.com https://*.benthanhtourist.com"
+# Chatbot đứng sau nginx (Docker trên VPS): "1" thì lấy IP khách thật từ X-Forwarded-For khi kết nối đến từ mạng nội bộ. Chạy thẳng ra Internet thì để trống.
+TRUST_PROXY = os.environ.get("TRUST_PROXY", "").strip() == "1"
+# "1": tự đồng bộ tour từ website mỗi ngày lúc GIO_DONG_BO_TOUR giờ Việt Nam (mặc định 3 giờ sáng), và ngay khi khởi động nếu kho tour trống.
+TU_DONG_BO_TOUR = os.environ.get("TU_DONG_BO_TOUR", "").strip() == "1"
+GIO_DONG_BO_TOUR = int(os.environ.get("GIO_DONG_BO_TOUR", "").strip() or 3)

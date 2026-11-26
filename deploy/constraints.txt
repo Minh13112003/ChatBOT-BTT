@@ -1,0 +1,11 @@
+# Phiên bản đã chạy thử trên máy phát triển (2026-11-26). Dockerfile cài theo đúng các bản này để VPS không tự lên bản mới bị lệch.
+fastapi==0.141.1
+uvicorn==0.53.0
+openai==3.16.2
+httpx==0.28.1
+python-multipart==0.0.33
+chromadb==1.5.9
+onnxruntime==1.30.0
+python-dotenv==1.2.3
+psycopg==3.3.8
+psycopg-binary==3.3.8

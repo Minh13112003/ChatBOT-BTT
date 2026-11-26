@@ -1,3 +1,4 @@
+import ipaddress
 import re
 import threading
 import time
@@ -13,8 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 import admin_chat
+import rag as _rag
 import lich_su_db
-from config import NESTJS_BASE_URL, NHUNG_CHO_PHEP
+from config import GIO_DONG_BO_TOUR, NESTJS_BASE_URL, NHUNG_CHO_PHEP, TRUST_PROXY, TU_DONG_BO_TOUR
 from rules import (
     MAX_HISTORY_TURNS,
     RATE_LIMIT_PER_MINUTE,
@@ -287,6 +289,38 @@ async def chi_cho_website_duoc_phep_nhung(request: Request, call_next):
     return res
 
 
+def _dong_bo_tour_hang_ngay() -> None:
+    """TU_DONG_BO_TOUR=1 (Docker trên VPS): đồng bộ tour từ website khi kho trống lúc khởi động và mỗi ngày lúc GIO_DONG_BO_TOUR giờ VN,
+    để tour mới đưa lên web là chatbot có, tour ẩn (is_available = false) tự biến mất. Lỗi mạng thì giữ kho cũ, hôm sau thử lại."""
+    import sync_tours
+    gio_vn = timezone(timedelta(hours=7))
+
+    def chay():
+        try:
+            sync_tours.dong_bo()
+            _rag.nap_lai_kho()
+            print(f"Đồng bộ tour xong lúc {datetime.now(gio_vn):%d/%m %H:%M}.", flush=True)
+        except Exception as loi:
+            _rag.nap_lai_kho()
+            print(f"Đồng bộ tour lỗi ({type(loi).__name__}: {loi}), giữ dữ liệu cũ.", flush=True)
+
+    if _rag._collection.count() == 0:
+        chay()
+    while True:
+        bay_gio = datetime.now(gio_vn)
+        lan_toi = bay_gio.replace(hour=GIO_DONG_BO_TOUR, minute=0, second=0, microsecond=0)
+        if lan_toi <= bay_gio:
+            lan_toi += timedelta(days=1)
+        time.sleep((lan_toi - bay_gio).total_seconds())
+        chay()
+
+
+@app.on_event("startup")
+def _bat_dong_bo_tour() -> None:
+    if TU_DONG_BO_TOUR:
+        threading.Thread(target=_dong_bo_tour_hang_ngay, name="dong-bo-tour", daemon=True).start()
+
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 khoi_tao_database()
 
@@ -530,8 +564,22 @@ _MAU_SDT_VN = re.compile(r"^(?:\+?84|0)\d{9}$")
 
 def _ip_khach(request: Request) -> str:
     host = request.client.host if request.client else ""
+    # Docker trên VPS (TRUST_PROXY=1): kết nối luôn đến từ nginx trong mạng nội bộ, nginx ghi IP khách thật vào X-Forwarded-For.
+    # Container không mở cổng ra ngoài nên chỉ nginx nối tới được; không tin header thì mọi khách chung một IP, chung giới hạn.
+    if TRUST_PROXY and _la_ip_noi_bo(host):
+        chuyen_tiep = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        if chuyen_tiep:
+            return chuyen_tiep
     # Chỉ tin header của Cloudflare khi kết nối đến từ chính máy này (cloudflared chạy cùng máy); kết nối thẳng thì tự giả được.
     return (request.headers.get("cf-connecting-ip") or host) if host in _MAY_NOI_BO else host
+
+
+def _la_ip_noi_bo(host: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return host == "localhost"
+    return ip.is_private or ip.is_loopback
 
 
 def _kiem_tra_gioi_han_ip(request: Request, loai: str) -> None:

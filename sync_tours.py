@@ -291,20 +291,21 @@ def dong_bo():
                 "the_loai": the_loai_theo_ten.get(_chuan_hoa_ten(chi_tiet["name"]), ""),
             })
 
-    # Ghi vào ChromaDB — xoá sạch rồi tạo lại thay vì chỉ upsert, vì mỗi lượt
-    # khởi hành hết chỗ/bị huỷ sẽ biến mất khỏi lần đồng bộ sau (id không còn
-    # xuất hiện trong "ids" mới) — upsert đơn thuần để lại record đó làm rác
-    # (bug thật gặp phải: sau khi đổi cấu trúc 1-record/lượt, record cũ dùng
-    # id_dai_dien gộp nhiều ngày vẫn còn sót lại song song với các record mới).
+    # Ghi vào ChromaDB: upsert lượt mới rồi XOÁ các id không còn (lượt hết chỗ / bị huỷ / tour bị ẩn), nếu không chúng nằm lại làm rác
+    # (bug thật: record cũ dùng id_dai_dien gộp nhiều ngày còn sót song song với record mới). Trước đây xoá cả kho rồi tạo lại, nhưng
+    # chatbot chạy trên VPS tự đồng bộ hằng ngày trong lúc đang phục vụ khách: kho bị xoá giữa chừng thì câu hỏi lúc đó lỗi
+    # "Collection does not exist" (gặp khi thử 2026-11-26). Giữ nguyên kho thì không có khoảng trống đó.
+    if not ids:
+        raise RuntimeError("API không trả tour nào, giữ nguyên dữ liệu cũ")
     client = chromadb.PersistentClient(path=CHROMA_PATH)
-    try:
-        client.delete_collection(CHROMA_COLLECTION)
-    except Exception:
-        pass
-    collection = client.create_collection(CHROMA_COLLECTION)
+    collection = client.get_or_create_collection(CHROMA_COLLECTION)
+    id_cu = set(collection.get(include=[])["ids"])
     collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
+    bo_di = sorted(id_cu - set(ids))
+    if bo_di:
+        collection.delete(ids=bo_di)
 
-    print(f"Đã lập chỉ mục {len(ids)} tour vào ChromaDB.")
+    print(f"Đã lập chỉ mục {len(ids)} tour vào ChromaDB (bỏ {len(bo_di)} lượt không còn).")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+.env
+deploy/.env
+.git
+__pycache__/
+*.pyc
+tour_db/
+chatbot.sqlite3
+ragas/
+tests/
+mobile/
+b_100_*.md

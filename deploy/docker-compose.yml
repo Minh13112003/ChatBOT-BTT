@@ -1,0 +1,39 @@
+# Chatbot bttAI trên VPS, chạy cạnh trang quản trị (project `btt`) và nginx của VinhSang.
+# Chạy từ thư mục deploy/:   cp .env.example .env   (điền giá trị)   rồi   docker compose up -d --build
+# Xem HUONG-DAN-DEPLOY.md.
+name: bttbot
+
+services:
+  chatbot:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Dữ liệu tour và lịch sử chat nằm trong volume, build lại không mất.
+      CHROMA_PATH: /data/tour_db
+      DATABASE_PATH: /data/chatbot.sqlite3
+      # Đứng sau nginx: lấy IP khách thật từ X-Forwarded-For (giới hạn số câu mỗi phút theo từng khách).
+      TRUST_PROXY: "1"
+      # Tự đồng bộ tour từ website lúc 3 giờ sáng mỗi ngày, và ngay lần chạy đầu khi kho tour còn trống.
+      TU_DONG_BO_TOUR: "1"
+    volumes:
+      - chatbot-data:/data
+    # KHÔNG mở cổng ra ngoài: nginx của VinhSang nối vào qua mạng vinhsang.
+    networks: [btt, vinhsang]
+    mem_limit: 1g
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+networks:
+  # Mạng nội bộ của trang quản trị (project `btt`, mạng `internal`): gọi backend `btt-backend-1` và database `btt-postgres-1`.
+  btt:
+    external: true
+    name: btt_internal
+  # Mạng của VinhSang: nginx chuyển chatbot.benthanhtourist.com vào `bttbot-chatbot-1:8000`.
+  vinhsang:
+    external: true
+    name: vinhsang_vinhsang
+
+volumes:
+  chatbot-data: {}
