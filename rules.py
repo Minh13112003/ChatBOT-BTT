@@ -272,11 +272,10 @@ ALIAS_DIEM_DEN = {
     "blue mountains": "Sydney",
     "nước úc": "Sydney",
     # Viết tắt / viết liền khách hay gõ (khớp theo ranh giới từ nên "hn" không dính vào chữ khác)
+    # Không có "hn", "hq" ở đây: hay là "hôm nay", "hôm qua"; rag.mo_rong_viet_tat chỉ đổi khi đứng sau "tour", "đi"... (2026-11-26)
     "pq": "Kiên Giang",
     "phuquoc": "Kiên Giang",
     "dalat": "Lâm Đồng",
-    "hn": "Hà Nội",
-    "hq": "Hàn Quốc",
     "nb": "Nhật Bản",
     "kl": "Kuala Lumpur",
     "đn": "Đà Nẵng",

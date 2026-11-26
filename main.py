@@ -32,7 +32,7 @@ from rag import (
     chia_trang_dip, hoi_dip_le_chung, hoi_xem_tiep_tour,
     tim_tour_lien_quan, hoi_tim_tour_thieu_thong_tin, hoi_muon_gap_nhan_vien, hoi_cach_dat_tour, _co_cum_tu,
     dia_danh_khong_co_tour, ten_goi_diem_den, trich_diem_den, can_nhan_vien_som,
-    co_cau_hoi_ngoai_sdt, la_cau_hoi_cua_nhan_vien, nhieu_noi_hoac_nhieu_ngay, hoi_ngay_khoi_hanh_sat,
+    co_cau_hoi_ngoai_sdt, la_cau_hoi_cua_nhan_vien, nhieu_noi_hoac_nhieu_ngay, hoi_ngay_khoi_hanh_sat, mo_rong_viet_tat,
 )
 from moderation import co_noi_dung_nhay_cam
 from llm_gemini import hoi_gemini, lay_token_cau_vua_hoi, tom_tat_hoi_thoai
@@ -823,6 +823,11 @@ def _xu_ly_chat(
             # Backend đang tắt, hoặc nhân viên vừa trả khách cho bot: tin đã được lưu ở trên nhưng không gọi AI cho tin vượt giới hạn.
             return {"reply": vuot_gioi_han, "tours": [], "goi_y": []}
 
+    # Tên địa điểm gõ tắt ("tour TLan", "đi PQ") đổi thành tên đầy đủ trước khi tìm tour. Làm SAU khi đã báo trang quản trị nên sale
+    # vẫn thấy đúng chữ khách gõ.
+    if not req.action and req.message:
+        req.message = mo_rong_viet_tat(req.message)
+
     # Luồng ĐẶT TOUR (máy trạng thái, không qua Gemini): xem dat_tour.py. Khách web không có token nên chỉ ghi nhận yêu cầu
     # (nhân viên gọi lại), không tạo đơn thật trên NestJS.
     ket_qua_dat_tour = None if mang_xa_hoi else dat_tour.xu_ly(
@@ -958,7 +963,8 @@ def _xu_ly_chat(
         if con_lai:
             reply += "\n\n" + nhac_xem_tiep(con_lai)
     dat_tour.ghi_tour_gan_nhat(session_key, tours)
-    if tours and not goi_y_lam_ro and not mang_xa_hoi:
+    # Web: mỗi thẻ tour có nút "Đặt tour này" riêng (static/chat.html) nên không cần nút chung bắt chọn lại tour (chủ dự án yêu cầu 2026-11-26).
+    if tours and not goi_y_lam_ro and not mang_xa_hoi and kenh != "WEB":
         goi_y_lam_ro = ["Tôi muốn đặt tour này"]
     if tours and con_lai:
         goi_y_lam_ro = ["Còn tour nào không", *goi_y_lam_ro]

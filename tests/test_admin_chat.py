@@ -135,7 +135,9 @@ class KhachWeb(NenNoiAdmin):
         self._identify()
         self.tours_chat = [{"tour_key": "k", "ten": "T", "id": "i", "gia": 1, "so_ngay": 1, "ngay_khoi_hanh": "", "so_cho_con": 1, "anh": None, "url": "", "diem_den": "", "loai_hinh": ""}]
         res = self._chat("Cho xem tour").json()
-        self.assertIn("Tôi muốn đặt tour này", res["goi_y"])
+        # Từ 2026-11-26 web đặt bằng nút "Đặt tour này" trên từng thẻ (static/chat.html), không còn nút chung bắt chọn lại tour.
+        self.assertNotIn("Tôi muốn đặt tour này", res["goi_y"])
+        self.assertEqual(res["tours"][0]["tour_key"], "k")
         with mock.patch.object(main.dat_tour, "xu_ly", return_value=None) as xu_ly:
             self._chat("Cho xem tour")
         self.assertEqual(xu_ly.call_args.args[1], "", "Khách web không có token tài khoản")

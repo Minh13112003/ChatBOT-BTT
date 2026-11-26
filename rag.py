@@ -771,6 +771,37 @@ def alias_khop(alias: str, cau_hoi_thuong: str) -> int:
     return m.start() if m else -1
 
 
+# Tên địa điểm khách gõ tắt khi chat (chủ dự án báo 2026-11-26: "tôi muốn tour TLan" bị trả "chưa có tour đi TLan").
+# Viết tắt ghép chữ (TLan, HQuoc...) không trùng từ thường nên đổi ở mọi chỗ trong câu.
+_VIET_TAT_RO = {
+    "tlan": "Thái Lan", "thailan": "Thái Lan", "hquoc": "Hàn Quốc", "hanquoc": "Hàn Quốc", "nban": "Nhật Bản", "nhatban": "Nhật Bản",
+    "tquoc": "Trung Quốc", "trungquoc": "Trung Quốc", "dloan": "Đài Loan", "đloan": "Đài Loan", "dlat": "Đà Lạt", "đlat": "Đà Lạt",
+    "pquoc": "Phú Quốc", "phuquoc": "Phú Quốc", "dnang": "Đà Nẵng", "đnang": "Đà Nẵng", "ntrang": "Nha Trang", "nhatrang": "Nha Trang",
+    "hlong": "Hạ Long", "halong": "Hạ Long", "hgiang": "Hà Giang", "mtay": "Miền Tây", "ptiet": "Phan Thiết", "qnhon": "Quy Nhơn",
+    "vtau": "Vũng Tàu", "cdao": "Côn Đảo", "sgp": "Singapore", "cpc": "Campuchia", "hkong": "Hồng Kông", "msia": "Malaysia",
+    "hnoi": "Hà Nội", "tnky": "Thổ Nhĩ Kỳ",
+}
+# Viết tắt 2-3 chữ dễ trùng câu thường ("hn" = hôm nay, "tl" = trả lời, "nt" = nhắn tin): chỉ đổi khi đứng ngay sau "tour", "đi", "du lịch"...
+_VIET_TAT_NGAN = {
+    "tq": "Trung Quốc", "hq": "Hàn Quốc", "nb": "Nhật Bản", "jp": "Nhật Bản", "tl": "Thái Lan", "pq": "Phú Quốc", "dn": "Đà Nẵng",
+    "đn": "Đà Nẵng", "đl": "Đà Lạt", "nt": "Nha Trang", "hn": "Hà Nội", "nz": "New Zealand",
+}
+_MAU_VIET_TAT_RO = re.compile(r"(?<!\w)(" + "|".join(sorted(map(re.escape, _VIET_TAT_RO), key=len, reverse=True)) + r")(?!\w)", re.IGNORECASE)
+_MAU_VIET_TAT_NGAN = re.compile(
+    r"(?<!\w)(tour|tua|du lịch|du lich|đi|di|sang|qua|đến|den|tới|toi|chuyến|chuyen)\s+("
+    + "|".join(sorted(map(re.escape, _VIET_TAT_NGAN), key=len, reverse=True)) + r")(?!\w)",
+    re.IGNORECASE,
+)
+
+
+def mo_rong_viet_tat(cau_hoi: str) -> str:
+    """Đổi tên địa điểm viết tắt thành tên đầy đủ ("tour TLan" -> "tour Thái Lan", "đi PQ" -> "đi Phú Quốc") trước khi tìm tour."""
+    if not cau_hoi:
+        return cau_hoi
+    cau = _MAU_VIET_TAT_RO.sub(lambda m: _VIET_TAT_RO[m.group(1).lower()], unicodedata.normalize("NFC", cau_hoi))
+    return _MAU_VIET_TAT_NGAN.sub(lambda m: f"{m.group(1)} {_VIET_TAT_NGAN[m.group(2).lower()]}", cau)
+
+
 def trich_diem_den(cau_hoi: str) -> str | None:
     """Tên điểm đến (field diem_den) là điều kiện rạch ròi giống loai_hinh —
     khách hỏi "tour Trung Quốc" phải chỉ ra đúng tour Trung Quốc, không để
@@ -781,6 +812,7 @@ def trich_diem_den(cau_hoi: str) -> str | None:
     (không phân biệt hoa/thường), coi là khách đã nhắc rõ điểm đến đó.
     Ưu tiên giá trị DÀI HƠN trước (VD "Trung Quốc" phải thắng "Trung" nếu có
     2 giá trị lồng nhau) để tránh khớp nhầm phần chung chung."""
+    cau_hoi = mo_rong_viet_tat(cau_hoi)  # "tour HQ" -> "tour Hàn Quốc", "tour TLan" -> "tour Thái Lan"
     cau_hoi_thuong = _bo_chu_nhat(cau_hoi.lower())
     toan_bo = tat_ca_luot_con_han()
     cac_diem_den = sorted(
@@ -1368,6 +1400,7 @@ def tim_tour_lien_quan(
     goi_y_gan_dung: dict | None = None,
 ) -> list[dict]:
     """Tìm tour theo câu hỏi; câu hỏi theo dịp lễ thì tách nhóm tour đúng tên / chỉ trùng ngày, xem _phan_nhom_theo_dip()."""
+    cau_hoi = mo_rong_viet_tat(cau_hoi)  # "tour TLan" -> "tour Thái Lan"
     tours = _tim_tour_chua_phan_nhom(cau_hoi, top_k, lich_su, goi_y_gia, goi_y_gan_dung)
     dip = trich_dip_le(cau_hoi)
     return _phan_nhom_theo_dip(tours, dip) if dip else tours

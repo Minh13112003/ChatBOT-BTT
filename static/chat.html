@@ -67,7 +67,16 @@
   .cham-suy-nghi span:nth-child(2) { animation-delay: .15s; }
   .cham-suy-nghi span:nth-child(3) { animation-delay: .3s; }
   @keyframes nhay-cham { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
-  .the-tour { display: block; margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: #FFF8ED; border: 1px solid #F0D9B5; text-decoration: none; color: #222; }
+  .the-tour { display: block; margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: #FFF8ED; border: 1px solid #F0D9B5; color: #222; white-space: normal; }
+  .the-tour-link { display: block; text-decoration: none; color: inherit; }
+  .the-tour .xem-web { display: block; margin-top: 4px; font-size: .76rem; color: #C81E23; }
+  .nut-the-tour { display: flex; gap: 6px; margin-top: 8px; }
+  .nut-the-tour button { flex: 1; min-height: 40px; padding: 6px 8px; border-radius: 10px; font: inherit; font-size: .82rem; font-weight: 700; cursor: pointer; }
+  .nut-the-tour .nut-dat { background: #E5252A; border: 1px solid #E5252A; color: #fff; }
+  .nut-the-tour .nut-dat:hover:not(:disabled) { background: #C81E23; }
+  .nut-the-tour .nut-hoi { background: #fff; border: 1px solid #F0B8B8; color: #C81E23; }
+  .nut-the-tour .nut-hoi:hover:not(:disabled) { background: #FFF4F4; }
+  .nut-the-tour button:disabled { opacity: .55; cursor: not-allowed; }
   .the-tour b { display: block; color: #C81E23; }
   .the-tour .so-ngay-dem { display: block; margin-top: 2px; font-size: .8rem; color: #888; }
   .the-tour .ngay-khoi-hanh { display: block; margin-top: 2px; font-size: .8rem; color: #888; }
@@ -155,12 +164,20 @@
             <span v-else class="tep-pdf">PDF · {{ tin.tep.name }}</span>
           </a>{{ tin.noiDung }}<span v-if="tin.dangGoChu" class="con-tro-go"></span>
           <template v-if="!tin.dangGoChu">
-            <a v-for="t in tin.tours" :key="t.id" class="the-tour" :href="t.url" target="_blank">
-              <b>{{ t.ten }}</b>{{ t.gia != null ? t.gia.toLocaleString('vi-VN') + 'đ' : 'Xem chi tiết' }}
-              <span v-if="t.so_ngay" class="so-ngay-dem">{{ t.so_ngay }} ngày {{ t.so_ngay - 1 }} đêm</span>
-              <span v-if="ngayKhoiHanhGanNhat(t)" class="ngay-khoi-hanh">{{ nhanNgayKhoiHanh(t, tin.tours) }} {{ ngayKhoiHanhGanNhat(t) }}</span>
-              <span v-if="nhanConCho(t)" class="con-cho" :class="t.so_cho_con <= 5 ? 'sap-het' : 'con-nhieu'">{{ nhanConCho(t) }}</span>
-            </a>
+            <div v-for="t in tin.tours" :key="t.id" class="the-tour">
+              <a class="the-tour-link" :href="t.url" target="_blank" rel="noopener">
+                <b>{{ t.ten }}</b>{{ t.gia != null ? t.gia.toLocaleString('vi-VN') + 'đ' : 'Xem chi tiết' }}
+                <span v-if="t.so_ngay" class="so-ngay-dem">{{ t.so_ngay }} ngày {{ t.so_ngay - 1 }} đêm</span>
+                <span v-if="ngayKhoiHanhGanNhat(t)" class="ngay-khoi-hanh">{{ nhanNgayKhoiHanh(t, tin.tours) }} {{ ngayKhoiHanhGanNhat(t) }}</span>
+                <span v-if="nhanConCho(t)" class="con-cho" :class="t.so_cho_con <= 5 ? 'sap-het' : 'con-nhieu'">{{ nhanConCho(t) }}</span>
+                <span class="xem-web">Xem chi tiết trên website ›</span>
+              </a>
+              <!-- Mỗi thẻ một nút đặt riêng: vào thẳng bước chọn ngày, không phải chọn lại tour (chủ dự án yêu cầu 2026-11-26) -->
+              <div v-if="t.tour_key" class="nut-the-tour">
+                <button type="button" class="nut-dat" :disabled="dangChoPhanHoi" @click="datTour(t)">Đặt tour này</button>
+                <button type="button" class="nut-hoi" :disabled="dangChoPhanHoi" @click="hoiThemTour(t)">Tư vấn thêm</button>
+              </div>
+            </div>
             <div v-if="tin.goiY && tin.goiY.length" class="goi-y-nhanh">
               <button
                 v-for="cau in tin.goiY" :key="cau"
@@ -535,6 +552,15 @@ createApp({
       }
     }
 
+    // Nút trên từng thẻ tour: "Đặt tour này" gửi đúng mã tour (tour:<tour_key>) nên luồng đặt vào thẳng bước chọn ngày.
+    function datTour(t) {
+      const nhan = ("Đặt tour: " + t.ten).slice(0, 200);
+      guiCauHoi(nhan, { id: "tour:" + t.tour_key, label: nhan });
+    }
+    function hoiThemTour(t) {
+      guiCauHoi(`Mình quan tâm tour “${t.ten}”, tư vấn thêm giúp mình`);
+    }
+
     // hanhDong: nút của luồng đặt tour ({ id, label }); tinCoNut: tin chứa nút, khoá lại để không bấm lại nút của bước cũ.
     async function guiCauHoi(cauGoiY, hanhDong, tinCoNut) {
       const cauHoi = (cauGoiY ?? cauHoiDangNhap.value).trim();
@@ -605,7 +631,7 @@ createApp({
       }
     }
 
-    return { moChat, soChuaDoc, hienLoiChao, moKhungChat, dongKhungChat, laTinCuoiNhom, oChonTep, chonTep, danhSachTinNhan, cauHoiDangNhap, dangChoPhanHoi, dangChoPhanHoiTuServer, khungTinNhan, oNhap, tuGianONhap, moGoiY, cacCauGoiY, guiCauHoi, ngayKhoiHanhGanNhat, nhanNgayKhoiHanh, nhanConCho, daDinhDanh, tenKhach, sdtKhach, loiDinhDanh, dangGuiThongTin, guiThongTin };
+    return { moChat, soChuaDoc, hienLoiChao, moKhungChat, dongKhungChat, laTinCuoiNhom, datTour, hoiThemTour, oChonTep, chonTep, danhSachTinNhan, cauHoiDangNhap, dangChoPhanHoi, dangChoPhanHoiTuServer, khungTinNhan, oNhap, tuGianONhap, moGoiY, cacCauGoiY, guiCauHoi, ngayKhoiHanhGanNhat, nhanNgayKhoiHanh, nhanConCho, daDinhDanh, tenKhach, sdtKhach, loiDinhDanh, dangGuiThongTin, guiThongTin };
   },
 }).mount("#app");
 </script>
