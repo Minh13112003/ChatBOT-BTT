@@ -451,6 +451,8 @@ def _lay_tin_nhan_vien(kenh: str, ma_ngoai: str, after: str | None, moc_som_nhat
     items = []
     for t in kq.get("items", []):
         muc = {"id": t["id"], "text": t["text"], "at": t["createdAt"]}
+        if t.get("edited"):
+            muc["edited"] = True
         tep = t.get("attachment")
         if tep:
             url = admin_chat.link_tep(tep["url"])
@@ -461,7 +463,28 @@ def _lay_tin_nhan_vien(kenh: str, ma_ngoai: str, after: str | None, moc_som_nhat
                 dong_moi = "\n" if muc["text"] else ""
                 muc["text"] = f"{muc['text']}{dong_moi}[Nhân viên gửi {loai}: {url}]"
         items.append(muc)
-    return {"che_do": kq.get("mode", "BOT"), "items": items, "cursor": items[-1]["at"] if items else moc}
+    # Tin đã có phía khách nhưng nhân viên vừa sửa, xoá hoặc thả biểu cảm (2026-11-26). Khung chat tìm theo `id` (tin nhân viên)
+    # hoặc `ma_tin` (câu khách, chatbot tạo mã). Mốc đọc lần sau phải qua cả thay đổi, không thì lần nào cũng nhận lại.
+    thay_doi = [
+        {k: v for k, v in {
+            "id": c.get("id"),
+            "ma_tin": c.get("externalMessageId"),
+            "deleted": bool(c.get("deleted")),
+            "text": c.get("text"),
+            "edited": c.get("edited"),
+            "reactions": c.get("reactions") or [],
+        }.items() if v is not None}
+        for c in kq.get("changes") or []
+    ]
+    cursor = max([m for m in [items[-1]["at"] if items else None, kq.get("changedUntil")] if m] or [moc], key=_thoi_diem)
+    return {"che_do": kq.get("mode", "BOT"), "items": items, "changes": thay_doi, "cursor": cursor}
+
+
+def _thoi_diem(iso: str) -> datetime:
+    try:
+        return datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------- Khách gửi ảnh / PDF cho nhân viên
@@ -662,7 +685,11 @@ def web_chat(req: WebChatRequest, nen: BackgroundTasks, request: Request):
         # Khoá ở máy chủ, không chỉ ẩn ô nhập trên trang: chưa có tên + SĐT thì không giải đáp, không gọi AI.
         return JSONResponse({"code": "CAN_THONG_TIN", "message": CAN_THONG_TIN_KHACH}, status_code=403)
     # Không có dấu ":" trong mã: kiem_tra_rate_limit tách theo ":" nên "web:..." sẽ gộp mọi khách web làm một.
-    return _xu_ly_chat(req, nen, f"web-{req.device_id}", "", "WEB", req.device_id, khach)
+    ma_tin = admin_chat.ma_tin_moi()
+    kq = _xu_ly_chat(req, nen, f"web-{req.device_id}", "", "WEB", req.device_id, khach, ma_tin_khach=ma_tin)
+    if isinstance(kq, dict) and not req.action:
+        kq = {**kq, "ma_tin": ma_tin}
+    return kq
 
 
 @app.post("/web/attachment")
@@ -729,7 +756,10 @@ def _xu_ly_chat(
     kenh: str,
     ma_ngoai: str,
     khach: dict | None,
+    ma_tin_khach: str | None = None,
 ):
+    """`ma_tin_khach`: mã tin của câu khách gửi trang quản trị (web tạo trước để trả về khung chat, nhờ đó khung chat
+    gắn được biểu cảm nhân viên thả vào đúng câu của khách)."""
     don_tin_nhan_cu_3_ngay()
 
     # [GEMINI] T-003: Khoá session nội bộ f"{user_id}:{conversation_id}"
@@ -795,7 +825,7 @@ def _xu_ly_chat(
             ly_do_som = "NGAY_SAT"
         ai_van_tra_loi = ly_do_som == "SDT" and co_cau_hoi_ngoai_sdt(req.message)
         bao_nhan_vien = doi_nguoi or bool(ly_do_som)
-        ma_tin_khach = admin_chat.ma_tin_moi()
+        ma_tin_khach = ma_tin_khach or admin_chat.ma_tin_moi()
         tu_admin = admin_chat.inbound(kenh, ma_ngoai, req.message, khach, bao_nhan_vien, ma_tin=ma_tin_khach,
                                       cau_bao=TRA_LOI_NHAN_VIEN_SOM[ly_do_som] if ly_do_som in CAU_BAO_RIENG else None)
         if tu_admin is None:

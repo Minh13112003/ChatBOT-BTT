@@ -59,6 +59,10 @@
   .bong-bong { max-width: 78%; padding: 8px 12px; border-radius: 18px; font-size: .9rem; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
   .dong.khach .bong-bong { background: #E5252A; color: #fff; }
   .dong.bot .bong-bong { background: #F0F0F0; color: #050505; }
+  /* Nhân viên sửa / thu hồi tin, thả biểu cảm (2026-11-26) */
+  .bong-bong .da-sua { display: block; margin-top: 2px; font-size: .7rem; opacity: .7; }
+  .bong-bong.thu-hoi { font-style: italic; opacity: .65; }
+  .bieu-cam { display: flex; width: fit-content; gap: 2px; margin-top: 4px; padding: 1px 6px; border-radius: 999px; background: #fff; color: #050505; font-size: .8rem; box-shadow: 0 1px 2px rgba(0,0,0,.15); }
   .con-tro-go { display: inline-block; width: 2px; height: 1em; background: #999; vertical-align: text-bottom; margin-left: 1px; animation: nhay-con-tro .8s infinite; }
   @keyframes nhay-con-tro { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
   .dang-suy-nghi { display: flex; align-items: center; gap: 8px; color: #888; font-style: italic; }
@@ -158,11 +162,13 @@
           <div v-if="laTinCuoiNhom(i)" class="anh-dai-dien nho" aria-hidden="true">btt</div>
           <div v-else class="cho-anh"></div>
         </template>
-        <div class="bong-bong"><span v-if="tin.nhanVien" class="nhan-nhan-vien">Nhân viên BenThanh Tourist</span>
+        <div class="bong-bong" :class="{ 'thu-hoi': tin.daThuHoi }"><span v-if="tin.nhanVien" class="nhan-nhan-vien">Nhân viên BenThanh Tourist</span>
           <a v-if="tin.tep" class="tep-dinh-kem" :href="tin.tep.url" target="_blank" rel="noopener">
             <img v-if="tin.tep.type.startsWith('image/')" :src="tin.tep.url" :alt="tin.tep.name" loading="lazy" @load="cuonXuongDuoi">
             <span v-else class="tep-pdf">PDF · {{ tin.tep.name }}</span>
           </a>{{ tin.noiDung }}<span v-if="tin.dangGoChu" class="con-tro-go"></span>
+          <span v-if="tin.daSua && !tin.daThuHoi" class="da-sua">Đã chỉnh sửa</span>
+          <span v-if="tin.bieuCam && tin.bieuCam.length" class="bieu-cam" :aria-label="'Nhân viên đã thả ' + tin.bieuCam.length + ' biểu cảm'">{{ tin.bieuCam.map((e) => BIEU_CAM[e] || '').join('') }}</span>
           <template v-if="!tin.dangGoChu">
             <div v-for="t in tin.tours" :key="t.id" class="the-tour">
               <a class="the-tour-link" :href="t.url" target="_blank" rel="noopener">
@@ -328,16 +334,35 @@ createApp({
         if (conTro) ghiKho("bttai_con_tro", conTro);
         if (data.items && data.items.length) {
           for (const t of data.items) {
-            danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: t.text, tours: [], nhanVien: true, tep: t.attachment || null, luc: Date.now() });
+            danhSachTinNhan.value.push({ vaiTro: "bot", noiDung: t.text, tours: [], nhanVien: true, tep: t.attachment || null, maNV: t.id, daSua: !!t.edited, luc: Date.now() });
           }
           luuTin();
           cuonXuongDuoi();
         }
+        if (data.changes && data.changes.length) apDungThayDoi(data.changes);
       } catch (e) {
         // Lỗi mạng: lần sau hỏi lại từ mốc cũ.
       } finally {
         dangHoiTinNhanVien = false;
       }
+    }
+    const BIEU_CAM = { like: "👍", heart: "❤️", haha: "😆", wow: "😮", sad: "😢", angry: "😡" };
+    // Nhân viên sửa, thu hồi tin hoặc thả biểu cảm: tìm tin theo mã tin nhân viên (maNV) hoặc mã câu của khách (maTin).
+    function apDungThayDoi(ds) {
+      let doi = false;
+      for (const c of ds) {
+        const tin = danhSachTinNhan.value.find((m) => (c.id && m.maNV === c.id) || (c.ma_tin && m.maTin === c.ma_tin));
+        if (!tin) continue;
+        doi = true;
+        if (c.deleted) {
+          Object.assign(tin, { noiDung: "Tin nhắn đã được thu hồi", tep: null, tours: [], daThuHoi: true, bieuCam: [], daSua: false });
+          continue;
+        }
+        if (tin.daThuHoi && typeof c.text !== "string") tin.daThuHoi = false; // tin được khôi phục mà không có chữ mới (tin của khách)
+        if (typeof c.text === "string") Object.assign(tin, { noiDung: c.text, daSua: !!c.edited, daThuHoi: false });
+        tin.bieuCam = Array.isArray(c.reactions) ? c.reactions.filter((e) => BIEU_CAM[e]) : [];
+      }
+      if (doi) luuTin();
     }
     function batDauNhanTinNhanVien() {
       if (daBatHoiTin) return;
@@ -567,6 +592,7 @@ createApp({
       if (!cauHoi || dangChoPhanHoi.value) return;
       if (tinCoNut) tinCoNut.daTraLoi = true;
       danhSachTinNhan.value.push({ vaiTro: "user", noiDung: cauHoi, luc: Date.now() });
+      const tinKhach = danhSachTinNhan.value[danhSachTinNhan.value.length - 1];
       luuTin();
       cauHoiDangNhap.value = "";
       nextTick(tuGianONhap); // gửi xong -> ô nhập rỗng -> co lại về 1 dòng
@@ -613,6 +639,8 @@ createApp({
         }
 
         const data = await res.json();
+        // Mã câu của khách bên trang quản trị: nhân viên thả biểu cảm vào câu này thì khung chat biết gắn vào đâu.
+        if (data.ma_tin) { tinKhach.maTin = data.ma_tin; luuTin(); }
         // Nhân viên đang xử lý: bot im lặng, tin nhân viên đến qua hoiTinNhanVien().
         if (data.che_do === "STAFF" && !data.reply) return;
         dangChoPhanHoiTuServer.value = false; // tắt "đang suy nghĩ", chuyển sang gõ chữ
@@ -631,7 +659,7 @@ createApp({
       }
     }
 
-    return { moChat, soChuaDoc, hienLoiChao, moKhungChat, dongKhungChat, laTinCuoiNhom, datTour, hoiThemTour, oChonTep, chonTep, danhSachTinNhan, cauHoiDangNhap, dangChoPhanHoi, dangChoPhanHoiTuServer, khungTinNhan, oNhap, tuGianONhap, moGoiY, cacCauGoiY, guiCauHoi, ngayKhoiHanhGanNhat, nhanNgayKhoiHanh, nhanConCho, daDinhDanh, tenKhach, sdtKhach, loiDinhDanh, dangGuiThongTin, guiThongTin };
+    return { BIEU_CAM, moChat, soChuaDoc, hienLoiChao, moKhungChat, dongKhungChat, laTinCuoiNhom, datTour, hoiThemTour, oChonTep, chonTep, danhSachTinNhan, cauHoiDangNhap, dangChoPhanHoi, dangChoPhanHoiTuServer, khungTinNhan, oNhap, tuGianONhap, moGoiY, cacCauGoiY, guiCauHoi, ngayKhoiHanhGanNhat, nhanNgayKhoiHanh, nhanConCho, daDinhDanh, tenKhach, sdtKhach, loiDinhDanh, dangGuiThongTin, guiThongTin };
   },
 }).mount("#app");
 </script>

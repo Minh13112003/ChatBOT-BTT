@@ -89,7 +89,28 @@ class KhachApp(NenNoiAdmin):
     def test_cap_nhat_tra_tin_va_doi_con_tro(self):
         self.updates.return_value = {"mode": "STAFF", "items": [{"id": "m1", "text": "Dạ", "createdAt": "2026-11-05T01:00:00.000Z"}]}
         res = self.client.get("/chat/updates?after=2026-11-05T00:00:00.000Z", headers={"Authorization": "Bearer t"}).json()
-        self.assertEqual(res, {"che_do": "STAFF", "items": [{"id": "m1", "text": "Dạ", "at": "2026-11-05T01:00:00.000Z"}], "cursor": "2026-11-05T01:00:00.000Z"})
+        self.assertEqual(res, {"che_do": "STAFF", "items": [{"id": "m1", "text": "Dạ", "at": "2026-11-05T01:00:00.000Z"}], "changes": [], "cursor": "2026-11-05T01:00:00.000Z"})
+
+    def test_cap_nhat_tra_thay_doi_sua_xoa_bieu_cam_va_moc_qua_ca_thay_doi(self):
+        """Nhân viên sửa / xoá tin, thả biểu cảm vào câu khách (2026-11-26): khung chat nhận `changes`, mốc lần sau qua cả thay đổi."""
+        self.updates.return_value = {
+            "mode": "STAFF",
+            "items": [{"id": "m2", "text": "Dạ có", "createdAt": "2026-11-05T01:00:00.000Z", "edited": True}],
+            "changes": [
+                {"id": "m1", "externalMessageId": None, "deleted": False, "text": "Giá mới", "edited": True, "reactions": [], "changedAt": "2026-11-05T02:00:00.000Z"},
+                {"id": "m0", "externalMessageId": "web-ma-1", "deleted": False, "reactions": ["heart"], "changedAt": "2026-11-05T02:30:00.000Z"},
+                {"id": "m9", "externalMessageId": None, "deleted": True, "reactions": [], "changedAt": "2026-11-05T02:10:00.000Z"},
+            ],
+            "changedUntil": "2026-11-05T02:30:00.000Z",
+        }
+        res = self.client.get("/chat/updates?after=2026-11-05T00:00:00.000Z", headers={"Authorization": "Bearer t"}).json()
+        self.assertEqual(res["items"][0]["edited"], True)
+        self.assertEqual(res["changes"], [
+            {"id": "m1", "deleted": False, "text": "Giá mới", "edited": True, "reactions": []},
+            {"id": "m0", "ma_tin": "web-ma-1", "deleted": False, "reactions": ["heart"]},
+            {"id": "m9", "deleted": True, "reactions": []},
+        ])
+        self.assertEqual(res["cursor"], "2026-11-05T02:30:00.000Z")
 
 
 class HoSoKhach(NenTest):
@@ -130,6 +151,12 @@ class KhachWeb(NenNoiAdmin):
         kenh, ma, _text, khach, _doi = self.inbound.call_args.args
         self.assertEqual((kenh, ma), ("WEB", self.thiet_bi))
         self.assertEqual(khach, {"name": "Nguyễn Thị Hoa", "phone": "0900000101"})
+
+    def test_tra_ma_tin_cua_cau_khach_de_khung_chat_gan_bieu_cam(self):
+        """Nhân viên thả biểu cảm vào câu khách web (2026-11-26): khung chat cần đúng mã tin đã gửi trang quản trị."""
+        self._identify()
+        r = self._chat().json()
+        self.assertEqual(r["ma_tin"], self.inbound.call_args.kwargs["ma_tin"])
 
     def test_khach_web_vao_luong_dat_tour_khong_co_token(self):
         self._identify()
